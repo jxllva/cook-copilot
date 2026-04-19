@@ -6,7 +6,7 @@ import { Step1Landing } from "./Step1Landing";
 import { Step2Profile } from "./Step2Profile";
 import { Step3Prompt } from "./Step3Prompt";
 import { Step4Dietitian } from "./Step4Dietitian";
-import { Step5Chef } from "./Step5Chef";
+import { Step5ChefV2 as Step5Chef } from "./Step5ChefV2";
 import { Step6Engineer } from "./Step6Engineer";
 
 // ─────────────────────────────────────────────────────────────────────────────
