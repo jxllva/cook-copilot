@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWizardStore } from "../../store/wizardStore";
 import { Step3Prompt } from "./Step3Prompt";
+import { ProfileSwitcher } from "./ProfileSwitcher";
 import { Step4Dietitian } from "./Step4Dietitian";
 import { Step5Chef } from "./Step5Chef";
 import { Step6Engineer } from "./Step6Engineer";
@@ -116,11 +117,21 @@ export function WizardShell() {
           {currentStep > 3 && (
             <button
               onClick={startOver}
-              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--header-fg2)", padding: "4px 8px", borderRadius: 6 }}
+              style={{
+                background: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                cursor: "pointer", fontSize: 12, fontWeight: 500,
+                color: "var(--header-fg)",
+                padding: "5px 12px", borderRadius: 999,
+                transition: "background .15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.2)"}
+              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"}
             >
               Start over
             </button>
           )}
+          <ProfileSwitcher />
           <a
             href="/settings"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, color: "var(--header-fg2)", textDecoration: "none", transition: "color 0.15s, background 0.15s" }}
