@@ -115,18 +115,19 @@ function SyringeRecipeCardV2({ recipe }: { recipe: SyringeRecipe }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shape preview — 3 AI-generated variants fetched from /api/silhouettes
+// Form Selection — 3 AI-generated silhouette variants
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ShapeVariant = { label: string; description: string; b64: string | null };
 
-function ThumbSkeleton() {
+const SKELETON_BG = `linear-gradient(90deg, #ebebeb 25%, #f5f5f5 50%, #ebebeb 75%)`;
+
+function ShimmerBlock({ width, height, radius = 8 }: { width: number | string; height: number | string; radius?: number }) {
   return (
     <div style={{
-      width: 40, height: 40, borderRadius: 6,
-      background: `linear-gradient(90deg, ${T.border} 25%, rgba(26,20,16,0.06) 50%, ${T.border} 75%)`,
-      backgroundSize: "200% 100%",
-      animation: "shimmer 1.4s ease infinite",
+      width, height, borderRadius: radius,
+      background: SKELETON_BG, backgroundSize: "300% 100%",
+      animation: "shimmer 1.6s ease infinite",
     }} />
   );
 }
@@ -134,25 +135,25 @@ function ThumbSkeleton() {
 function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null; shapeName: string }) {
   const [selected, setSelected] = useState(0);
   const [variants, setVariants] = useState<ShapeVariant[]>([
-    { label: "Classic",    description: "Standard form",   b64: defaultB64 },
-    { label: "Rounded",    description: "Soft & plump",    b64: null },
-    { label: "Geometric",  description: "Angular & bold",  b64: null },
+    { label: "Classic",   description: "Standard form",   b64: defaultB64 },
+    { label: "Rounded",   description: "Soft & bubbly",   b64: null },
+    { label: "Geometric", description: "Angular & bold",  b64: null },
   ]);
-  const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(!!shapeName);
 
-  const formattedName = shapeName
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase()) + " Form";
+  const displayName = shapeName
+    ? shapeName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Shape";
 
   useEffect(() => {
-    if (!shapeName) { setLoading(false); return; }
-    setLoading(true);
+    if (!shapeName) { setFetching(false); return; }
+    setFetching(true);
     runSilhouettes(shapeName)
-      .then(({ variants: fetched }) => {
-        setVariants(fetched.map((v) => ({ label: v.label, description: v.description, b64: v.b64 })));
-      })
-      .catch(() => {/* keep defaults */})
-      .finally(() => setLoading(false));
+      .then(({ variants: fetched }) =>
+        setVariants(fetched.map((v) => ({ label: v.label, description: v.description, b64: v.b64 })))
+      )
+      .catch(() => { /* keep seeded default */ })
+      .finally(() => setFetching(false));
   }, [shapeName]);
 
   const active = variants[selected];
@@ -160,88 +161,137 @@ function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null
 
   return (
     <div style={{
-      background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 16,
-      padding: 16, display: "flex", flexDirection: "column", gap: 10,
+      background: "#FFFFFF",
+      border: "1px solid rgba(0,0,0,0.07)",
+      borderRadius: 20,
+      padding: "20px 20px 16px",
+      display: "flex", flexDirection: "column", gap: 16,
       height: "100%", boxSizing: "border-box",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
     }}>
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: T.ink, fontFamily: "'Geist', sans-serif" }}>
-          Shape Preview
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, fontFamily: "'Geist', sans-serif", letterSpacing: "-0.01em" }}>
+          Choose Form
         </div>
-        <div style={{ fontSize: 11, color: T.muted, marginTop: 2,
-          fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" }}>
-          {formattedName}{active ? ` · ${active.label}` : ""}
+        <div style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em" }}>
+          {displayName} · {active?.label ?? "—"}
         </div>
       </div>
 
-      {/* Main image */}
+      {/* Main preview */}
       <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden", borderRadius: 10, background: T.cream, padding: 8,
+        flex: 1, minHeight: 160,
+        borderRadius: 14,
+        background: "#F7F7F5",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        overflow: "hidden", padding: 16,
+        position: "relative",
       }}>
         {activeSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            key={`${selected}-${activeSrc.slice(-12)}`}
             src={activeSrc}
-            alt={`Food silhouette — ${active?.label}`}
-            style={{ width: "100%", maxHeight: 180, objectFit: "contain", imageRendering: "pixelated", transition: "opacity 0.2s" }}
+            alt={`${displayName} — ${active?.label}`}
+            style={{
+              maxWidth: "100%", maxHeight: 200, objectFit: "contain",
+              imageRendering: "pixelated",
+              animation: "fadeIn 0.2s ease",
+            }}
           />
         ) : (
-          <div style={{
-            width: "100%", height: 160,
-            display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", gap: 8, color: T.muted,
-          }}>
-            {loading ? (
-              <div style={{
-                width: 80, height: 80, borderRadius: 8,
-                background: `linear-gradient(90deg, ${T.border} 25%, rgba(26,20,16,0.06) 50%, ${T.border} 75%)`,
-                backgroundSize: "200% 100%", animation: "shimmer 1.4s ease infinite",
-              }} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {fetching ? (
+              <ShimmerBlock width={120} height={120} radius={12} />
             ) : (
-              <>
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                  <ellipse cx="12" cy="14" rx="7" ry="6" /><circle cx="12" cy="7" r="3" />
+              <div style={{ textAlign: "center", color: "#BBBBBB" }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+                  <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace" }}>No shape</span>
-              </>
+                <div style={{ fontSize: 11, marginTop: 8, fontFamily: "'Geist', sans-serif" }}>No shape</div>
+              </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Thumbnail row */}
-      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-        {variants.map((v, idx) => (
-          <button key={idx} onClick={() => v.b64 && setSelected(idx)}
-            title={v.description}
-            style={{
-              width: 72, height: 72, borderRadius: 10,
-              cursor: v.b64 ? "pointer" : "default",
-              border: selected === idx ? `2px solid ${T.forest}` : `1.5px solid ${T.border}`,
-              background: T.cream,
-              padding: 6, display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 4,
-              transition: "border 0.15s",
-              overflow: "hidden",
-            }}>
-            {v.b64 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={`data:image/png;base64,${v.b64}`} alt={v.label}
-                style={{ width: 40, height: 40, objectFit: "contain", imageRendering: "pixelated" }} />
-            ) : (
-              <ThumbSkeleton />
-            )}
-            <span style={{
-              fontSize: 9,
-              color: selected === idx ? T.forest : T.muted,
-              fontWeight: selected === idx ? 700 : 400,
-              fontFamily: "'Geist Mono', monospace", letterSpacing: "0.04em",
-            }}>
-              {v.label}
-            </span>
-          </button>
-        ))}
+      {/* Form gallery */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {variants.map((v, idx) => {
+          const isActive = selected === idx;
+          const hasImg = !!v.b64;
+          const src = hasImg ? `data:image/png;base64,${v.b64}` : null;
+
+          return (
+            <button
+              key={idx}
+              onClick={() => hasImg && setSelected(idx)}
+              style={{
+                flex: 1, minWidth: 0,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                padding: "10px 6px 10px",
+                borderRadius: 14,
+                border: isActive ? `2px solid ${T.forest}` : "1.5px solid rgba(0,0,0,0.07)",
+                background: isActive ? "rgba(21,60,54,0.03)" : "#FAFAFA",
+                cursor: hasImg ? "pointer" : "default",
+                transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
+                boxShadow: isActive ? `0 2px 12px rgba(21,60,54,0.12)` : "none",
+                outline: "none",
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive && hasImg) {
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(21,60,54,0.3)";
+                  (e.currentTarget as HTMLElement).style.background = "#F5F5F3";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,0,0,0.07)";
+                  (e.currentTarget as HTMLElement).style.background = "#FAFAFA";
+                }
+              }}
+            >
+              {/* Thumbnail image */}
+              <div style={{
+                width: 52, height: 52,
+                borderRadius: 10,
+                background: "#F0F0EE",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                overflow: "hidden",
+              }}>
+                {src ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={src} alt={v.label}
+                    style={{ width: 40, height: 40, objectFit: "contain", imageRendering: "pixelated" }} />
+                ) : (
+                  <ShimmerBlock width={40} height={40} radius={6} />
+                )}
+              </div>
+
+              {/* Labels */}
+              <div style={{ textAlign: "center" }}>
+                <div style={{
+                  fontSize: 11, fontWeight: isActive ? 700 : 500,
+                  color: isActive ? T.forest : T.ink,
+                  fontFamily: "'Geist', sans-serif",
+                  letterSpacing: "-0.01em",
+                }}>
+                  {v.label}
+                </div>
+                <div style={{
+                  fontSize: 9, color: T.muted, marginTop: 1,
+                  fontFamily: "'Geist Mono', monospace", letterSpacing: "0.03em",
+                }}>
+                  {v.description}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -355,7 +405,7 @@ export function Step5ChefV2() {
 
   return (
     <>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } } @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } } @keyframes shimmer { 0% { background-position: -300% 0; } 100% { background-position: 300% 0; } } @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }`}</style>
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
         background: "var(--bg)" }}>

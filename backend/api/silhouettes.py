@@ -39,31 +39,44 @@ _VARIANTS = [
     {
         "label": "Classic",
         "description": "Standard form",
-        "suffix": "Standard proportions and classic recognizable interpretation of the shape.",
+        "suffix": (
+            "Faithful, recognizable interpretation with natural proportions. "
+            "The silhouette must be a single fully-closed solid shape with no gaps, "
+            "holes, or floating islands — suitable for food 3D printing as a cookie-cutter path."
+        ),
     },
     {
         "label": "Rounded",
-        "description": "Soft & plump",
-        "suffix": "Plump, rounded, chubby version with soft smooth curves. Exaggerated friendly proportions.",
+        "description": "Soft & bubbly",
+        "suffix": (
+            "Inflated, balloon-like version of the same subject. All curves are convex and smooth — "
+            "imagine the shape gently puffed up. No sharp concavities, no thin spikes. "
+            "The silhouette is a single closed solid blob, 3D-printable without supports."
+        ),
     },
     {
         "label": "Geometric",
         "description": "Angular & bold",
-        "suffix": "Simplified angular geometric version. Clean sharp edges, polygon-like, bold and minimal.",
+        "suffix": (
+            "Stylized polygon approximation of the shape — reduce it to its essential angles "
+            "using straight edges and bold flat facets, like a low-poly design. "
+            "Fully closed solid fill, no floating pieces, distinct from the classic silhouette."
+        ),
     },
 ]
 
 # ── Generation ────────────────────────────────────────────────────────────────
 
+_BASE_PROMPT = (
+    "Pure solid black (#000000) filled silhouette of {shape} on a pure white (#FFFFFF) background. "
+    "Flat 2D, centered, no texture, no internal lines, no gradients, no shading. "
+    "Single closed shape — no disconnected parts. Like a rubber stamp. {suffix}"
+)
+
 def _generate_one(shape: str, suffix: str) -> Optional[str]:
     try:
         client = OpenAI()
-        prompt = (
-            f"A simple cookie cutter shape of a {shape}. "
-            f"Solid black (#000000) filled shape on pure white (#FFFFFF) background. "
-            f"Minimal, abstract silhouette — no texture, no internal lines, no shading. "
-            f"Like a flat rubber stamp. Centered, 2D. {suffix}"
-        )
+        prompt = _BASE_PROMPT.format(shape=shape, suffix=suffix)
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
