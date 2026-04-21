@@ -91,7 +91,7 @@ def _generate_one(shape: str, suffix: str) -> Optional[str]:
 
 @router.post("/api/silhouettes", response_model=SilhouettesResponse)
 async def generate_silhouettes(req: SilhouetteRequest) -> SilhouettesResponse:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     tasks = [
         loop.run_in_executor(_executor, _generate_one, req.shape, v["suffix"])
         for v in _VARIANTS

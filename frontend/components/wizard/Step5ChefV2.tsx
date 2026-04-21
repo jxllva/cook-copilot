@@ -132,7 +132,7 @@ function ShimmerBlock({ width, height, radius = 8 }: { width: number | string; h
   );
 }
 
-function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null; shapeName: string }) {
+function ContourPreviewV2({ defaultB64, shapeName, onSelect }: { defaultB64: string | null; shapeName: string; onSelect?: () => void }) {
   const [selected, setSelected] = useState(0);
   const [variants, setVariants] = useState<ShapeVariant[]>([
     { label: "Classic",   description: "Standard form",   b64: defaultB64 },
@@ -229,7 +229,7 @@ function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null
           return (
             <button
               key={idx}
-              onClick={() => hasImg && setSelected(idx)}
+              onClick={() => { setSelected(idx); onSelect?.(); }}
               style={{
                 flex: 1, minWidth: 0,
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
@@ -237,13 +237,13 @@ function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null
                 borderRadius: 14,
                 border: isActive ? `2px solid ${T.forest}` : "1.5px solid rgba(0,0,0,0.07)",
                 background: isActive ? "rgba(21,60,54,0.03)" : "#FAFAFA",
-                cursor: hasImg ? "pointer" : "default",
+                cursor: "pointer",
                 transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
                 boxShadow: isActive ? `0 2px 12px rgba(21,60,54,0.12)` : "none",
                 outline: "none",
               }}
               onMouseEnter={(e) => {
-                if (!isActive && hasImg) {
+                if (!isActive) {
                   (e.currentTarget as HTMLElement).style.borderColor = "rgba(21,60,54,0.3)";
                   (e.currentTarget as HTMLElement).style.background = "#F5F5F3";
                 }
@@ -272,22 +272,15 @@ function ContourPreviewV2({ defaultB64, shapeName }: { defaultB64: string | null
                 )}
               </div>
 
-              {/* Labels */}
-              <div style={{ textAlign: "center" }}>
-                <div style={{
-                  fontSize: 11, fontWeight: isActive ? 700 : 500,
-                  color: isActive ? T.forest : T.ink,
-                  fontFamily: "'Geist', sans-serif",
-                  letterSpacing: "-0.01em",
-                }}>
-                  {v.label}
-                </div>
-                <div style={{
-                  fontSize: 9, color: T.muted, marginTop: 1,
-                  fontFamily: "'Geist Mono', monospace", letterSpacing: "0.03em",
-                }}>
-                  {v.description}
-                </div>
+              {/* Label */}
+              <div style={{
+                fontSize: 11, fontWeight: isActive ? 700 : 500,
+                color: isActive ? T.forest : T.muted,
+                fontFamily: "'Geist', sans-serif",
+                letterSpacing: "-0.01em",
+                textAlign: "center",
+              }}>
+                {v.label}
               </div>
             </button>
           );
@@ -313,6 +306,7 @@ export function Step5ChefV2() {
 
   const profile = getSelectedProfile();
   const [showRevise, setShowRevise] = useState<ReviseKind | null>(null);
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   const isLoading = stepLoading.chef || stepLoading.engineer;
   const error = stepError.engineer;
@@ -358,6 +352,7 @@ export function Step5ChefV2() {
         timestamp: t0, duration_ms: Date.now() - t0 });
       setChefOutput(result);
       setShowRevise(null);
+      setHasInteracted(true);
     } catch (err) {
       setStepError("chef", err instanceof Error ? err.message : "Revision failed.");
     } finally {
@@ -450,6 +445,7 @@ export function Step5ChefV2() {
               <ContourPreviewV2
                 defaultB64={chefOutput.silhouette_image_b64}
                 shapeName={parsedPrompt?.shape ?? ""}
+                onSelect={() => setHasInteracted(true)}
               />
             </div>
 
@@ -520,9 +516,33 @@ export function Step5ChefV2() {
             </div>
           )}
 
-          {/* ── Inline RevisePanel (replaces modal overlay) ── */}
+          {/* ── Inline RevisePanel with context label ── */}
           {showRevise && (
-            <div style={{ animation: "fadeUp 0.2s ease" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeUp 0.2s ease" }}>
+              {/* Context label */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 16px",
+                borderRadius: 10,
+                background: "rgba(21,60,54,0.06)",
+                border: `1px solid rgba(21,60,54,0.14)`,
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke={T.forest} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: T.forest, fontFamily: "'Geist', sans-serif" }}>
+                    {showRevise === "recipe" ? "Recipe Feedback" : "Shape Feedback"}
+                  </span>
+                  <span style={{ fontSize: 12, color: T.muted, marginLeft: 8, fontFamily: "'Geist', sans-serif" }}>
+                    {showRevise === "recipe"
+                      ? "Describe changes to the recipe, ingredients, or nutrition targets"
+                      : "Describe changes to the print form or shape"}
+                  </span>
+                </div>
+              </div>
               <RevisePanel
                 onRevisePrompt={handleRevisePrompt}
                 onReviseManual={handleReviseManual}
@@ -535,58 +555,62 @@ export function Step5ChefV2() {
           )}
         </div>
 
-        {/* Bottom bar — hidden while RevisePanel is open (matches Step 4 pattern) */}
-        {!showRevise && (
-          <div style={{
-            flexShrink: 0,
-            background: T.card,
-            borderTop: `1.5px solid ${T.border}`,
-            padding: "14px 28px",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => setShowRevise("recipe")}
-                disabled={isLoading}
-              >
-                Recipe feedback
-              </Button>
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => setShowRevise("shape")}
-                disabled={isLoading}
-              >
-                Shape feedback
-              </Button>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <p style={{ margin: 0, fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
-                Review the recipe, then confirm to generate print instructions.
-              </p>
-              <Button
-                variant="primary"
-                size="md"
-                loading={stepLoading.engineer}
-                disabled={isLoading}
-                onClick={handleConfirm}
-                style={{
-                  background: isLoading ? undefined : T.forest,
-                  borderColor: isLoading ? undefined : T.forest,
-                  color: isLoading ? undefined : T.forestInk,
-                  borderRadius: 12,
-                  fontWeight: 600,
-                  padding: "11px 24px",
-                }}
-              >
-                {stepLoading.engineer ? "Generating…" : "Confirm →"}
-              </Button>
-            </div>
+        {/* Bottom bar — always visible */}
+        <div style={{
+          flexShrink: 0,
+          background: T.card,
+          borderTop: `1.5px solid ${T.border}`,
+          padding: "14px 28px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          {/* Left: feedback buttons (hidden while panel is open) */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {!showRevise ? (
+              <>
+                <Button variant="secondary" size="md"
+                  onClick={() => setShowRevise("recipe")} disabled={isLoading}>
+                  Recipe feedback
+                </Button>
+                <Button variant="secondary" size="md"
+                  onClick={() => setShowRevise("shape")} disabled={isLoading}>
+                  Shape feedback
+                </Button>
+              </>
+            ) : (
+              <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", alignSelf: "center" }}>
+                Submit or cancel feedback above to continue.
+              </span>
+            )}
           </div>
-        )}
+
+          {/* Right: Confirm */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {!hasInteracted && !showRevise && (
+              <p style={{ margin: 0, fontSize: 12, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
+                Select a form or edit the recipe to activate
+              </p>
+            )}
+            <Button
+              variant="primary"
+              size="md"
+              loading={stepLoading.engineer}
+              disabled={isLoading || (!hasInteracted && !stepLoading.engineer)}
+              onClick={handleConfirm}
+              style={{
+                background: hasInteracted && !isLoading ? T.forest : undefined,
+                borderColor: hasInteracted && !isLoading ? T.forest : undefined,
+                color: hasInteracted && !isLoading ? T.forestInk : undefined,
+                borderRadius: 12,
+                fontWeight: 600,
+                padding: "11px 24px",
+                opacity: hasInteracted || stepLoading.engineer ? 1 : 0.45,
+                transition: "opacity 0.2s, background 0.2s",
+              }}
+            >
+              {stepLoading.engineer ? "Generating…" : "Confirm →"}
+            </Button>
+          </div>
+        </div>
       </div>
     </>
   );
