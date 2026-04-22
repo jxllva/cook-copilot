@@ -741,9 +741,8 @@ export function Step5ChefV2() {
               transition: "opacity 0.2s, background 0.2s",
             }}
           >
-              {stepLoading.engineer ? "Generating…" : "Confirm →"}
-            </Button>
-          </div>
+            {stepLoading.engineer ? "Generating…" : "Confirm →"}
+          </Button>
         </div>
       </div>
     </>
