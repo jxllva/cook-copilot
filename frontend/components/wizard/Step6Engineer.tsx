@@ -1,16 +1,93 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useWizardStore } from "../../store/wizardStore";
-import { Button } from "../ui/Button";
-import { LoadingBlock } from "../ui/Spinner";
-import { RevisePanel } from "../ui/RevisePanel";
+import { StageLoader } from "../ui/StageLoader";
 import { regenerateGCode, runEngineer } from "../../lib/api";
 import { formatPrintTime } from "../../lib/formatters";
 import { GCodeCanvas, SYRINGE_COLORS } from "../engineer/GCodeCanvas";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Calibration G-code Generator
+// Design tokens — consistent with Step 3, 5 and the homepage
+// ─────────────────────────────────────────────────────────────────────────────
+
+const T = {
+  ink:       "#1A1410",
+  muted:     "#6B5D50",
+  card:      "#FFFFFF",
+  border:    "rgba(26, 20, 16, 0.12)",
+  forest:    "rgb(21, 60, 54)",
+  forestInk: "#FFF4E6",
+  cream:     "rgb(244, 244, 232)",
+  bg:        "#F5F5F0",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Micro-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REGEN_MSGS = [
+  "Regenerating print paths…",
+  "Applying your settings…",
+  "Optimizing layer data…",
+  "Building new G-code…",
+  "Almost done…",
+];
+
+function Dots() {
+  return (
+    <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+      {[0, 1, 2].map((i) => (
+        <span key={i} style={{
+          width: 4, height: 4, borderRadius: "50%",
+          background: "currentColor", display: "inline-block",
+          animation: `regenDot 1.1s ease-in-out ${i * 0.18}s infinite`,
+        }} />
+      ))}
+    </span>
+  );
+}
+
+function SyringeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 2l4 4-4 4" />
+      <path d="M14 6l4-4" />
+      <path d="M6 20l-4 4" />
+      <path d="M14 6L6 14l4 4 8-8" />
+      <line x1="6" y1="14" x2="2" y2="18" />
+      <line x1="10" y1="10" x2="14" y2="14" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ overflow: "visible" }}>
+      <path d="M23 4v6h-6" />
+      <path d="M1 20v-6h6" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calibration G-code generator (unchanged logic)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function generateCalibrationGCode(toolNumber: number, extrusionMultiplier: number, layerHeight: number): string {
   const extrusionValue = (50 * extrusionMultiplier).toFixed(4);
@@ -27,7 +104,6 @@ M83 ; Use relative extrusion mode
 G92 E0 ; Reset extrusion distance
 ; -----------------------------------
 T${toolNumber} ; Attach tool
-; Print a straight line
 G1 Z20 F400 ; Secure Z height
 G1 X160 Y190 F3000 ; Start point
 G1 Z${layerHeight.toFixed(1)} F400
@@ -40,319 +116,298 @@ G90 ; Use absolute coordinates
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Calibration Panel
-
-function CalibrationPanel({ numSyringes }: { numSyringes: number }) {
-  const [calTool, setCalTool] = useState(0);
-  const [calEM, setCalEM] = useState(0.02);
-  const [calLH, setCalLH] = useState(1.0);
-  const maxTool = Math.max((numSyringes || 1) - 1, 0);
-
-  function downloadCalibration() {
-    const gc = generateCalibrationGCode(calTool, calEM, calLH);
-    const blob = new Blob([gc], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `calibration_T${calTool}_EM${calEM.toFixed(4)}_LH${calLH.toFixed(1)}.gcode`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  const accentColor = SYRINGE_COLORS[calTool % SYRINGE_COLORS.length];
-  const numInputStyle: React.CSSProperties = {
-    width: 72,
-    padding: "5px 6px",
-    borderRadius: 6,
-    border: "1px solid var(--border)",
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: "'Fira Code', Consolas, monospace",
-    textAlign: "center",
-    background: "var(--bg)",
-    color: "var(--fg)",
-  };
-
-  return (
-    <div style={{ padding: 14, borderRadius: 10, background: "var(--bg2)", border: "1px solid var(--border)" }}>
-      <div style={{ fontSize: 11, lineHeight: 1.6, color: "var(--fg2)", marginBottom: 10 }}>
-        The calibration file prints a 50mm straight line. Adjust the extrusion multiplier and layer height based on the result.
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--fg2)" }}>Syringe</label>
-        <div style={{ display: "flex", gap: 4 }}>
-          {Array.from({ length: maxTool + 1 }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setCalTool(i)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                border: calTool === i ? `2px solid ${SYRINGE_COLORS[i]}` : "1px solid var(--border)",
-                background: calTool === i ? "var(--card-bg)" : "var(--bg)",
-                color: calTool === i ? SYRINGE_COLORS[i] : "var(--fg3)",
-              }}
-            >
-              Syringe {i + 1}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--fg2)" }}>Extrusion Multiplier</label>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 10, color: "var(--fg2)" }}>0.001</span>
-          <input type="range" min={0.001} max={1.0} step={0.001} value={calEM} onChange={e => setCalEM(Number(e.target.value))} style={{ flex: 1, accentColor }} />
-          <span style={{ fontSize: 10, color: "var(--fg2)" }}>1.00</span>
-          <input type="number" min={0.001} max={1.0} step={0.001} value={calEM} onChange={e => { const n = Number(e.target.value); if (n >= 0.001 && n <= 1.0) setCalEM(n); }} style={numInputStyle} />
-        </div>
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4, color: "var(--fg2)" }}>Layer Height (mm)</label>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 10, color: "var(--fg2)" }}>0.5</span>
-          <input type="range" min={0.5} max={5.0} step={0.1} value={calLH} onChange={e => setCalLH(Number(e.target.value))} style={{ flex: 1, accentColor }} />
-          <span style={{ fontSize: 10, color: "var(--fg2)" }}>5.0</span>
-          <input type="number" min={0.5} max={5.0} step={0.1} value={calLH} onChange={e => { const n = Number(e.target.value); if (n >= 0.5 && n <= 5.0) setCalLH(n); }} style={numInputStyle} />
-        </div>
-      </div>
-      <button
-        onClick={downloadCalibration}
-        style={{
-          padding: "7px 14px",
-          borderRadius: 8,
-          border: "none",
-          cursor: "pointer",
-          background: accentColor,
-          color: "white",
-          fontWeight: 700,
-          fontSize: 12,
-        }}
-      >
-        ⬇ Download Calibration G-code
-      </button>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 6: Engineer Review
-//
-// Shows the AI engineer's output: print metrics, GCode panel + 3D viewer,
-// extrusion controls. User can Download G-code or Revise (re-run engineer).
-// GCodeCanvas lives in components/engineer/GCodeCanvas.tsx.
+// MetricTile — print stats card with optional stepper
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── PrintMetrics row ──────────────────────────────────────────────────────────
-
-function MetricTile({ label, value, labelColor }: { label: string; value: string; labelColor?: string }) {
+function MetricTile({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div
-      style={{
-        flex: "1 1 0",
-        padding: "12px 16px",
-        background: "var(--card-bg)",
-        border: "1px solid var(--card-border)",
-        borderRadius: "10px",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: "10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: labelColor ?? "var(--fg3)", marginBottom: "4px" }}>
+    <div style={{
+      flex: "1 1 0", padding: "14px 16px",
+      background: T.card, border: `1px solid ${T.border}`,
+      borderRadius: 14, textAlign: "center",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+    }}>
+      <div style={{
+        fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+        letterSpacing: "0.1em", color: T.muted,
+        fontFamily: "'Geist Mono', monospace",
+      }}>
         {label}
       </div>
-      <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--fg)" }}>{value}</div>
+      <div style={{
+        fontSize: 18, fontWeight: 700, color: T.ink,
+        fontFamily: "'Geist', sans-serif", letterSpacing: "-0.02em",
+      }}>
+        {value}
+        {unit && <span style={{ fontSize: 13, fontWeight: 500, color: T.muted, marginLeft: 3 }}>{unit}</span>}
+      </div>
     </div>
   );
 }
 
-// ── ExtrusionControls ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ExtrusionCard — syringe EM + layer height in one row
+// ─────────────────────────────────────────────────────────────────────────────
 
-function ExtrusionControls({
+function ExtrusionCard({
   emValues,
   lhValue,
   onChange,
   onLhChange,
-  onRegenerate,
-  regenerating,
 }: {
   emValues: number[];
   lhValue: number;
   onChange: (values: number[]) => void;
   onLhChange: (v: number) => void;
-  onRegenerate: () => void;
-  regenerating: boolean;
 }) {
-  return (
-    <div
-      style={{
-        background: "var(--card-bg)",
-        border: "1px solid var(--card-border)",
-        borderRadius: "12px",
-        padding: "16px 20px",
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "12px",
-        alignItems: "flex-end",
-      }}
-    >
-      {/* Per-syringe EM sliders */}
-      {emValues.map((emVal, i) => (
-        <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: "120px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span
-              style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "2px",
-                background: SYRINGE_COLORS[i % 4],
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: "11px", fontWeight: 700, color: SYRINGE_COLORS[i % 4] }}>Syringe {i + 1}</span>
-            <span style={{ fontSize: "10px", color: "var(--fg3)" }}>Extrusion Multiplier</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <input
-              type="range"
-              min={0.001}
-              max={2.0}
-              step={0.001}
-              value={emVal}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                onChange(emValues.map((x, j) => (j === i ? n : x)));
-              }}
-              style={{ width: "80px", accentColor: SYRINGE_COLORS[i % 4] }}
-            />
-            <input
-              type="number"
-              min={0.001}
-              max={2.0}
-              step={0.001}
-              value={emVal}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (n >= 0.001 && n <= 2.0) onChange(emValues.map((x, j) => (j === i ? n : x)));
-              }}
-              style={{
-                width: "72px",
-                padding: "3px 6px",
-                borderRadius: "6px",
-                border: `1px solid ${SYRINGE_COLORS[i % 4]}60`,
-                background: "var(--bg)",
-                color: "var(--fg)",
-                fontSize: "11px",
-                fontWeight: 700,
-                fontFamily: "monospace",
-                textAlign: "center",
-              }}
-            />
-          </div>
-        </div>
-      ))}
+  const inputStyle = (accentColor?: string): React.CSSProperties => ({
+    width: "100%", padding: "5px 8px",
+    borderRadius: 8, fontSize: 13, fontWeight: 600,
+    fontFamily: "'Geist Mono', monospace", textAlign: "center",
+    border: `1.5px solid ${accentColor ? `${accentColor}60` : T.border}`,
+    background: T.card, color: T.ink, outline: "none",
+    boxSizing: "border-box",
+  });
 
-      {/* Layer height */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: "120px" }}>
-        <div style={{ fontSize: "10px", fontWeight: 600, color: "var(--fg3)" }}>Layer height</div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input
-            type="range"
-            min={0.5}
-            max={5.0}
-            step={0.1}
-            value={lhValue}
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderRadius: 14, padding: "16px 20px",
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 600, color: T.muted,
+        fontFamily: "'Geist', sans-serif", marginBottom: 14,
+      }}>
+        Extrusion Multiplier + Layer Height
+      </div>
+      <div style={{ height: 1, background: T.border, margin: "0 0 14px" }} />
+
+      <div style={{ display: "flex", gap: 16 }}>
+        {emValues.map((val, i) => {
+          const color = SYRINGE_COLORS[i % SYRINGE_COLORS.length];
+          return (
+            <div key={i} style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginBottom: 6,
+                fontFamily: "'Geist', sans-serif" }}>
+                Syringe {i + 1}
+              </div>
+              <input type="number" min={0.001} max={2.0} step={0.001} value={val}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (n >= 0.001 && n <= 2.0) onChange(emValues.map((x, j) => j === i ? n : x));
+                }}
+                style={inputStyle(color)}
+              />
+              <input type="range" min={0.001} max={2.0} step={0.001} value={val}
+                onChange={(e) => onChange(emValues.map((x, j) => j === i ? Number(e.target.value) : x))}
+                style={{ width: "100%", marginTop: 6, accentColor: color } as React.CSSProperties}
+              />
+            </div>
+          );
+        })}
+
+        {/* Layer height */}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 6,
+            fontFamily: "'Geist', sans-serif" }}>
+            Layer Height
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="number" min={0.5} max={5.0} step={0.1} value={lhValue}
+              onChange={(e) => { const n = Number(e.target.value); if (n >= 0.5 && n <= 5.0) onLhChange(n); }}
+              style={{ ...inputStyle(), flex: 1 }}
+            />
+            <span style={{ fontSize: 12, color: T.muted, fontFamily: "'Geist', sans-serif",
+              flexShrink: 0 }}>mm</span>
+          </div>
+          <input type="range" min={0.5} max={5.0} step={0.1} value={lhValue}
             onChange={(e) => onLhChange(Number(e.target.value))}
-            style={{ width: "80px", accentColor: "var(--fg)" }}
+            style={{ width: "100%", marginTop: 6, accentColor: T.ink } as React.CSSProperties}
           />
-          <input
-            type="number"
-            min={0.5}
-            max={5.0}
-            step={0.1}
-            value={lhValue}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (n >= 0.5 && n <= 5.0) onLhChange(n);
-            }}
-            style={{
-              width: "64px",
-              padding: "3px 6px",
-              borderRadius: "6px",
-              border: "1px solid var(--border)",
-              background: "var(--bg)",
-              color: "var(--fg)",
-              fontSize: "11px",
-              fontWeight: 700,
-              fontFamily: "monospace",
-              textAlign: "center",
-            }}
-          />
-          <span style={{ fontSize: "11px", color: "var(--fg3)" }}>mm</span>
         </div>
       </div>
-
-      {/* Regenerate button */}
-      <Button
-        variant="secondary"
-        size="sm"
-        loading={regenerating}
-        disabled={regenerating}
-        onClick={onRegenerate}
-        style={{ alignSelf: "flex-end" }}
-      >
-        {regenerating ? "Regenerating..." : "↻ Regenerate G-code"}
-      </Button>
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CalibrationCard — tabbed per-syringe calibration
+// ─────────────────────────────────────────────────────────────────────────────
 
-export function Step6Engineer() {
-  const {
-    engineerOutput,
-    chefOutput,
-    prompt,
-    parsedPrompt,
-    gcode,
-    setGcode,
-    setEngineerOutput,
-    emValues,
-    lhValue,
-    setEmValues,
-    setLhValue,
-    setStepLoading,
-    setStepError,
-    stepLoading,
-    stepError,
-    appendLog,
-    goToStep,
-  } = useWizardStore();
+function CalibrationCard({ numSyringes }: { numSyringes: number }) {
+  const count = Math.max(numSyringes || 1, 1);
+  const [activeTool, setActiveTool] = useState(0);
+  const [calEM, setCalEM] = useState(0.1);
+  const [calLH, setCalLH] = useState(0.1);
 
-  const [showRevise, setShowRevise] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [gcodeVersion, setGcodeVersion] = useState(0);
+  const accentColor = SYRINGE_COLORS[activeTool % SYRINGE_COLORS.length];
 
-  const error = stepError.engineer;
-  const meta = engineerOutput?.metadata;
-  const g = gcode || engineerOutput?.gcode || "";
-  const lineCount = g ? g.split("\n").length : 0;
-
-  // ── Download G-code
-  function handleDownload() {
-    const blob = new Blob([g], { type: "text/plain" });
+  function downloadCalibration() {
+    const gc = generateCalibrationGCode(activeTool, calEM, calLH);
+    const blob = new Blob([gc], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "cookpilot.gcode";
+    a.download = `calibration_T${activeTool}_EM${calEM.toFixed(3)}_LH${calLH.toFixed(1)}.gcode`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  // ── Regenerate GCode (EM/LH changed)
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "5px 8px",
+    borderRadius: 8, fontSize: 13, fontWeight: 600,
+    fontFamily: "'Geist Mono', monospace", textAlign: "center",
+    border: `1.5px solid ${accentColor}60`,
+    background: T.card, color: T.ink, outline: "none",
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderRadius: 14, padding: "16px 20px",
+    }}>
+      <div style={{
+        fontSize: 11, fontWeight: 600, color: T.muted,
+        fontFamily: "'Geist', sans-serif", marginBottom: 14,
+      }}>
+        Printing Calibration
+      </div>
+      <div style={{ height: 1, background: T.border, margin: "0 0 14px" }} />
+
+      {/* Syringe tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {Array.from({ length: count }, (_, i) => {
+          const color = SYRINGE_COLORS[i % SYRINGE_COLORS.length];
+          const isActive = activeTool === i;
+          return (
+            <button key={i} onClick={() => setActiveTool(i)}
+              style={{
+                padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                cursor: "pointer",
+                border: isActive ? `1.5px solid ${color}` : `1px solid ${T.border}`,
+                background: isActive ? "transparent" : "transparent",
+                color: isActive ? color : T.muted,
+                fontFamily: "'Geist', sans-serif",
+                transition: "border-color 0.12s, color 0.12s",
+              }}>
+              Syringe {i + 1}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 6,
+            fontFamily: "'Geist', sans-serif" }}>
+            Extrusion Multiplier (rate)
+          </div>
+          <input type="number" min={0.001} max={1.0} step={0.001} value={calEM}
+            onChange={(e) => { const n = Number(e.target.value); if (n >= 0.001 && n <= 1.0) setCalEM(n); }}
+            style={inputStyle}
+          />
+          <input type="range" min={0.001} max={1.0} step={0.001} value={calEM}
+            onChange={(e) => setCalEM(Number(e.target.value))}
+            style={{ width: "100%", marginTop: 6, accentColor } as React.CSSProperties}
+          />
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: T.muted, marginBottom: 6,
+            fontFamily: "'Geist', sans-serif" }}>
+            Layer Height
+          </div>
+          <input type="number" min={0.5} max={5.0} step={0.1} value={calLH}
+            onChange={(e) => { const n = Number(e.target.value); if (n >= 0.5 && n <= 5.0) setCalLH(n); }}
+            style={inputStyle}
+          />
+          <input type="range" min={0.5} max={5.0} step={0.1} value={calLH}
+            onChange={(e) => setCalLH(Number(e.target.value))}
+            style={{ width: "100%", marginTop: 6, accentColor } as React.CSSProperties}
+          />
+        </div>
+      </div>
+
+      <p style={{
+        margin: "14px 0 0", fontSize: 11, color: T.muted, lineHeight: 1.5,
+        fontFamily: "'Geist', sans-serif",
+      }}>
+        The calibration file prints a 150mm straight line in the X direction (center ±75mm).
+        Adjust the extrusion multiplier and layer height based on the result.
+      </p>
+
+      <button onClick={downloadCalibration}
+        style={{
+          display: "none", /* exposed via the main download button */
+        }}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 6: Printing Details
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function Step6Engineer() {
+  const {
+    engineerOutput, chefOutput, prompt, parsedPrompt,
+    gcode, setGcode, setEngineerOutput,
+    emValues, lhValue, setEmValues, setLhValue,
+    setStepLoading, setStepError, stepLoading, stepError,
+    appendLog, goToStep,
+  } = useWizardStore();
+
+  const [regenerating, setRegenerating] = useState(false);
+  const [gcodeVersion, setGcodeVersion] = useState(0);
+  const [showGcode, setShowGcode] = useState(false);
+  const [calTool, setCalTool] = useState(0);
+  const [calEM, setCalEM] = useState(0.1);
+  const [calLH, setCalLH] = useState(0.1);
+  const [regenMsgIndex, setRegenMsgIndex] = useState(0);
+  const [regenFade, setRegenFade] = useState(true);
+
+  useEffect(() => {
+    if (!regenerating) { setRegenMsgIndex(0); setRegenFade(true); return; }
+    const interval = setInterval(() => {
+      setRegenFade(false);
+      setTimeout(() => { setRegenMsgIndex((i) => (i + 1) % REGEN_MSGS.length); setRegenFade(true); }, 220);
+    }, 2600);
+    return () => clearInterval(interval);
+  }, [regenerating]);
+
+  const g = gcode || engineerOutput?.gcode || "";
+  const meta = engineerOutput?.metadata;
+  const accentColor = SYRINGE_COLORS[calTool % SYRINGE_COLORS.length];
+  const numSyringes = chefOutput?.syringe_recipes?.length ?? emValues.length;
+
+  function handleDownload() {
+    if (!g) return;
+    const blob = new Blob([g], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "cookpilot.gcode"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadCalibration() {
+    const gc = generateCalibrationGCode(calTool, calEM, calLH);
+    const blob = new Blob([gc], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calibration_T${calTool}_EM${calEM.toFixed(3)}_LH${calLH.toFixed(1)}.gcode`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadBoth() {
+    handleDownload();
+    handleDownloadCalibration();
+  }
+
   async function handleRegenerate() {
     if (!chefOutput || !engineerOutput?.silhouette_image_b64) return;
     setRegenerating(true);
@@ -372,272 +427,361 @@ export function Step6Engineer() {
     }
   }
 
-  // ── Revise: re-run engineer with prompt revision
-  async function handleRevisePrompt(revision: string) {
-    if (!chefOutput) return;
-    setStepLoading("engineer", true);
-    setStepError("engineer", null);
-    const revisedPrompt = `${prompt}\n\n[Revision request]: ${revision}`;
-    const t0 = Date.now();
-    try {
-      const result = await runEngineer(revisedPrompt, chefOutput, 0, parsedPrompt?.meal_type ?? "");
-      appendLog({
-        stage: "engineer",
-        request: { prompt: revisedPrompt, chef_output: chefOutput },
-        response: result as unknown as Record<string, unknown>,
-        timestamp: t0,
-        duration_ms: Date.now() - t0,
-      });
-      setEngineerOutput(result);
-      setGcodeVersion((v) => v + 1);
-      setShowRevise(false);
-    } catch (err) {
-      setStepError("engineer", err instanceof Error ? err.message : "Revision failed.");
-    } finally {
-      setStepLoading("engineer", false);
-    }
-  }
-
-  // ── Loading state
   if (!engineerOutput && stepLoading.engineer) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <LoadingBlock label="Generating G-code..." />
+        <StageLoader stage="engineer" />
       </div>
     );
   }
-
   if (!engineerOutput) return null;
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "24px",
-          maxWidth: "1100px",
-          margin: "0 auto",
-          width: "100%",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
+    <>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeIn { from { opacity:0; } to { opacity:1; } } @keyframes regenDot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }`}</style>
+
+      <div style={{
+        flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden",
+        background: T.cream, fontFamily: "'Geist', sans-serif",
+      }}>
+
+        {/* Scrollable content */}
+        <div style={{
+          flex: 1, overflowY: "auto",
+          padding: "32px 28px 24px",
+          display: "flex", flexDirection: "column", gap: 24,
           boxSizing: "border-box",
-        }}
-      >
-        {/* Print metrics */}
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <MetricTile
-            label="Size"
-            value={
-              meta?.width_mm && meta?.depth_mm
-                ? `${meta.width_mm}×${meta.depth_mm}mm`
-                : "?"
-            }
-          />
-          {meta?.num_layers != null && (
-            <MetricTile
-              label="Layers"
-              value={`${meta.num_layers} layers`}
-            />
-          )}
-          <MetricTile
-            label="Print time"
-            value={
-              meta?.estimated_print_time_seconds
-                ? formatPrintTime(meta.estimated_print_time_seconds)
-                : "?"
-            }
-          />
-          {(engineerOutput?.pieces ?? 1) > 1 && (
-            <MetricTile
-              label="Pieces"
-              value={`${engineerOutput!.pieces} pieces`}
-            />
-          )}
-          {meta?.print_weight_g != null && meta?.recipe_weight_g != null && (
-            <MetricTile
-              label="Paste"
-              value={`${meta.print_weight_g}g / ${meta.recipe_weight_g}g`}
-            />
-          )}
-        </div>
+          maxWidth: 1240, margin: "0 auto", width: "100%",
+        }}>
 
-        {/* Extrusion controls */}
-        <ExtrusionControls
-          emValues={emValues}
-          lhValue={lhValue}
-          onChange={setEmValues}
-          onLhChange={setLhValue}
-          onRegenerate={handleRegenerate}
-          regenerating={regenerating}
-        />
-
-        {/* GCode + 3D viewer */}
-        {g && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "12px",
-              height: "460px",
-            }}
-          >
-            {/* GCode panel */}
-            <div
+          {/* Page title + Regenerate */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <h2 style={{
+              margin: 0, fontSize: 36, fontWeight: 400,
+              color: T.ink, fontFamily: "'Instrument Serif', serif",
+              letterSpacing: "-0.01em", lineHeight: 1.1,
+            }}>
+              Printing Details
+            </h2>
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating || !g}
               style={{
-                display: "flex",
-                flexDirection: "column",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                overflow: "hidden",
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "10px 20px", borderRadius: 12,
+                border: `1.5px solid ${T.border}`,
+                background: "transparent", color: T.ink,
+                fontSize: 14, fontWeight: 500, cursor: regenerating ? "not-allowed" : "pointer",
+                fontFamily: "'Geist', sans-serif", opacity: regenerating ? 0.85 : 1,
+                transition: "background 0.12s",
+                minWidth: regenerating ? 220 : undefined,
               }}
+              onMouseEnter={(e) => { if (!regenerating) (e.currentTarget as HTMLElement).style.background = T.cream; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
             >
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderBottom: "1px solid var(--border)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--fg)" }}>
-                  G-code ({lineCount} lines)
-                </span>
-              </div>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: "10px",
-                  fontSize: "10px",
-                  lineHeight: "1.4",
-                  flex: 1,
-                  overflowY: "auto",
-                  background: "#1a1a1a",
-                  color: "#d4d4d4",
-                  fontFamily: "'SF Mono', 'Fira Code', Consolas, monospace",
-                }}
-              >
-                {g.split("\n").slice(0, 400).map((line, i) => {
-                  let color = "#d4d4d4";
-                  if (line.startsWith(";")) color = "#666";
-                  else if (line.startsWith("G0")) color = "#8ac4ff";
-                  else if (line.startsWith("G1")) color = "#ffa07a";
-                  else if (line.startsWith("T")) color = "#ccc";
-                  return (
-                    <span key={i}>
-                      <span style={{ color: "#444", userSelect: "none" }}>
-                        {String(i + 1).padStart(4, " ")}{"  "}
-                      </span>
-                      <span style={{ color }}>{line}</span>
-                      {"\n"}
+              {regenerating ? (
+                <>
+                  <Dots />
+                  <span style={{ opacity: regenFade ? 1 : 0, transition: "opacity 0.22s ease" }}>
+                    {REGEN_MSGS[regenMsgIndex]}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <RefreshIcon />
+                  Regenerate G-code
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Main two-column layout */}
+          <div style={{ display: "flex", gap: 20, alignItems: "stretch" }}>
+
+            {/* ── Left: 3D Preview card ── */}
+            <div style={{
+              width: 380, flexShrink: 0,
+              background: T.card, border: `1px solid ${T.border}`,
+              borderRadius: 16, overflow: "hidden",
+              display: "flex", flexDirection: "column",
+            }}>
+              {/* Card header */}
+              <div style={{ padding: "16px 20px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: T.forest, color: T.forestInk,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    <SyringeIcon />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.ink }}>3D Preview</div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 1,
+                      fontFamily: "'Geist Mono', monospace" }}>
+                      G-code print path
+                    </div>
+                  </div>
+                  {/* View G-Code toggle */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
+                      View G-Code
                     </span>
-                  );
-                })}
-                {lineCount > 400 && (
-                  <span style={{ color: "#444" }}>{`\n... ${lineCount - 400} more lines`}</span>
+                    <button
+                      onClick={() => setShowGcode((v) => !v)}
+                      aria-pressed={showGcode}
+                      style={{
+                        width: 40, height: 22, borderRadius: 11,
+                        border: "none", cursor: "pointer", padding: 0,
+                        background: showGcode ? T.forest : "rgba(26,20,16,0.15)",
+                        position: "relative", transition: "background 0.18s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        position: "absolute", top: 3,
+                        left: showGcode ? 21 : 3,
+                        width: 16, height: 16, borderRadius: "50%",
+                        background: "#fff",
+                        transition: "left 0.18s",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      }} />
+                    </button>
+                  </div>
+                </div>
+                <div style={{ height: 1, background: T.border, marginTop: 14 }} />
+              </div>
+
+              {/* Canvas / G-code text — flex-grows to fill card, size never changes on toggle */}
+              <div style={{ flex: 1, minHeight: 320, padding: "0 12px 12px", position: "relative", boxSizing: "border-box" }}>
+                {!g ? (
+                  <div style={{
+                    height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                    color: T.muted, fontSize: 13,
+                  }}>
+                    No G-code generated
+                  </div>
+                ) : showGcode ? (
+                  <div style={{
+                    height: "100%", borderRadius: 10, overflow: "hidden",
+                    background: "#0d1117", position: "relative", minHeight: 0,
+                  }}>
+                    <div style={{
+                      position: "absolute", inset: 0, overflowY: "auto",
+                      padding: "10px 0",
+                      fontFamily: "'Geist Mono', 'Courier New', monospace",
+                      fontSize: 11, lineHeight: "18px",
+                    }}>
+                      {g.split("\n").map((line, i) => {
+                        const trimmed = line.trimStart();
+                        const isComment = trimmed.startsWith(";");
+                        const isCommand = /^[GMT]\d/i.test(trimmed);
+                        const lineColor = isComment
+                          ? "#6a9955"
+                          : isCommand
+                          ? "#9cdcfe"
+                          : "#d4d4d4";
+                        return (
+                          <div key={i} style={{ display: "flex", minHeight: 18 }}>
+                            <span style={{
+                              width: 36, flexShrink: 0, textAlign: "right",
+                              paddingRight: 12, color: "#404040",
+                              userSelect: "none", fontSize: 10,
+                            }}>
+                              {i + 1}
+                            </span>
+                            <span style={{ color: lineColor, whiteSpace: "pre", paddingRight: 14 }}>
+                              {line}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ height: "100%" }}>
+                    <GCodeCanvas key={gcodeVersion} gcode={g} />
+                  </div>
                 )}
-              </pre>
+              </div>
+
             </div>
 
-            {/* 3D viewer */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderBottom: "1px solid var(--border)",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  color: "var(--fg)",
-                  flexShrink: 0,
-                }}
-              >
-                3D Preview
+            {/* ── Right: controls column ── */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+
+              {/* Metric tiles */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <MetricTile
+                  label="Print Time"
+                  value={meta?.estimated_print_time_seconds
+                    ? formatPrintTime(meta.estimated_print_time_seconds)
+                    : "—"}
+                />
+                <MetricTile
+                  label="Layers"
+                  value={meta?.num_layers ? String(meta.num_layers) : "—"}
+                  unit={meta?.num_layers ? "layers" : undefined}
+                />
+                <MetricTile
+                  label="Amount"
+                  value={String(engineerOutput.pieces ?? 1)}
+                  unit="pieces"
+                />
               </div>
-              <div style={{ flex: 1, minHeight: 0, padding: "8px" }}>
-                <GCodeCanvas key={gcodeVersion} gcode={g} />
+
+              {/* Extrusion Multiplier + Layer Height */}
+              <ExtrusionCard
+                emValues={emValues}
+                lhValue={lhValue}
+                onChange={setEmValues}
+                onLhChange={setLhValue}
+              />
+
+              {/* Printing Calibration */}
+              <div style={{
+                background: T.card, border: `1px solid ${T.border}`,
+                borderRadius: 14, padding: "16px 20px",
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 600, color: T.muted,
+                  marginBottom: 14,
+                }}>
+                  Printing Calibration
+                </div>
+                <div style={{ height: 1, background: T.border, margin: "0 0 14px" }} />
+
+                {/* Syringe tabs */}
+                <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+                  {Array.from({ length: Math.max(numSyringes, 1) }, (_, i) => {
+                    const color = SYRINGE_COLORS[i % SYRINGE_COLORS.length];
+                    const isActive = calTool === i;
+                    return (
+                      <button key={i} onClick={() => setCalTool(i)}
+                        style={{
+                          padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                          cursor: "pointer",
+                          border: isActive ? `1.5px solid ${color}` : `1px solid ${T.border}`,
+                          background: "transparent",
+                          color: isActive ? color : T.muted,
+                          fontFamily: "'Geist', sans-serif",
+                          transition: "border-color 0.12s, color 0.12s",
+                        }}>
+                        Syringe {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* EM + LH controls */}
+                <div style={{ display: "flex", gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
+                      Extrusion Multiplier (rate)
+                    </div>
+                    <input type="number" min={0.001} max={1.0} step={0.001} value={calEM}
+                      onChange={(e) => { const n = Number(e.target.value); if (n >= 0.001 && n <= 1.0) setCalEM(n); }}
+                      style={{
+                        width: "100%", padding: "5px 8px", borderRadius: 8,
+                        fontSize: 13, fontWeight: 600, textAlign: "center",
+                        border: `1.5px solid ${accentColor}60`,
+                        background: T.card, color: T.ink, outline: "none",
+                        boxSizing: "border-box", fontFamily: "'Geist Mono', monospace",
+                      }}
+                    />
+                    <input type="range" min={0.001} max={1.0} step={0.001} value={calEM}
+                      onChange={(e) => setCalEM(Number(e.target.value))}
+                      style={{ width: "100%", marginTop: 6, accentColor } as React.CSSProperties}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
+                      Layer Height
+                    </div>
+                    <input type="number" min={0.5} max={5.0} step={0.1} value={calLH}
+                      onChange={(e) => { const n = Number(e.target.value); if (n >= 0.5 && n <= 5.0) setCalLH(n); }}
+                      style={{
+                        width: "100%", padding: "5px 8px", borderRadius: 8,
+                        fontSize: 13, fontWeight: 600, textAlign: "center",
+                        border: `1.5px solid ${accentColor}60`,
+                        background: T.card, color: T.ink, outline: "none",
+                        boxSizing: "border-box", fontFamily: "'Geist Mono', monospace",
+                      }}
+                    />
+                    <input type="range" min={0.5} max={5.0} step={0.1} value={calLH}
+                      onChange={(e) => setCalLH(Number(e.target.value))}
+                      style={{ width: "100%", marginTop: 6, accentColor } as React.CSSProperties}
+                    />
+                  </div>
+                </div>
+
+                <p style={{
+                  margin: "14px 0 0", fontSize: 11, color: T.muted, lineHeight: 1.5,
+                }}>
+                  The calibration file prints a 150mm straight line in the X direction (center ±75mm).
+                  Adjust the extrusion multiplier and layer height based on the result.
+                </p>
               </div>
+
+              {/* Error */}
+              {stepError.engineer && (
+                <div style={{
+                  padding: "12px 16px", borderRadius: 10,
+                  background: "#fff0f0", border: "1px solid #fcc",
+                  color: "#c0392b", fontSize: 13,
+                }}>
+                  {stepError.engineer}
+                </div>
+              )}
             </div>
           </div>
-        )}
-
-        {/* Calibration (hidden researcher details) */}
-        <details style={{ marginTop: "4px" }}>
-          <summary
-            style={{
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--fg3)",
-              userSelect: "none",
-              marginBottom: "8px",
-            }}
-          >
-            Extrusion Calibration
-          </summary>
-          <CalibrationPanel numSyringes={emValues.length} />
-        </details>
-
-        {/* Revise panel */}
-        {showRevise && (
-          <RevisePanel
-            onRevisePrompt={handleRevisePrompt}
-            loading={stepLoading.engineer}
-            error={stepError.engineer}
-            onCancel={() => setShowRevise(false)}
-          />
-        )}
-
-        {/* Error */}
-        {error && (
-          <div
-            style={{
-              padding: "12px 16px",
-              borderRadius: "8px",
-              background: "#fff0f0",
-              border: "1px solid #fcc",
-              color: "#c0392b",
-              fontSize: "13px",
-            }}
-          >
-            {error}
-          </div>
-        )}
-      </div>
-
-      {/* Download / Revise bar */}
-      {!showRevise && (
-        <div
-          style={{
-            position: "sticky",
-            bottom: 0,
-            background: "var(--bg)",
-            borderTop: "1px solid var(--border)",
-            padding: "14px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: "10px",
-          }}
-        >
-          <p style={{ margin: 0, fontSize: "13px", color: "var(--fg3)", flex: 1 }}>
-            Your food is ready to print. Download the G-code file to send to your printer.
-          </p>
-          <Button variant="primary" size="md" onClick={handleDownload} disabled={!g}>
-            Download G-code
-          </Button>
         </div>
-      )}
-    </div>
+
+        {/* Bottom bar */}
+        <div style={{
+          flexShrink: 0, background: T.card,
+          borderTop: `1.5px solid ${T.border}`,
+          padding: "14px 28px",
+          display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,
+        }}>
+          {/* Previous + Download */}
+          <button
+            onClick={() => goToStep(5)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "10px 18px", borderRadius: 12,
+              border: `1.5px solid ${T.border}`,
+              background: "transparent", color: T.muted,
+              fontSize: 14, fontWeight: 500, cursor: "pointer",
+              fontFamily: "'Geist', sans-serif",
+              transition: "background 0.12s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = T.cream; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          >
+            ← Previous
+          </button>
+
+          {/* Download */}
+          <button
+            onClick={handleDownloadBoth}
+            disabled={!g}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "11px 24px", borderRadius: 12,
+              border: "none",
+              background: g ? T.forest : T.border,
+              color: g ? T.forestInk : T.muted,
+              fontSize: 14, fontWeight: 600, cursor: g ? "pointer" : "not-allowed",
+              fontFamily: "'Geist', sans-serif",
+            }}
+          >
+            <DownloadIcon />
+            Download G-code + Calibration
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
