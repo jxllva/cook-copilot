@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useWizardStore } from "../../store/wizardStore";
 import { LoadingBlock } from "../ui/Spinner";
 import { Button } from "../ui/Button";
-import { RevisePanel } from "../ui/RevisePanel";
 import { runParse, runChef, runEngineer, runSilhouettes } from "../../lib/api";
 import { NutritionFactsTable } from "../chef/NutritionFactsTable";
 import type { SyringeRecipe } from "../../lib/types";
@@ -308,9 +307,14 @@ export function Step5ChefV2() {
   } = useWizardStore();
 
   const profile = getSelectedProfile();
-  const [showRevise, setShowRevise] = useState<ReviseKind | null>(null);
+  const [feedbackKind, setFeedbackKind] = useState<ReviseKind>("recipe");
+  const [feedbackTab, setFeedbackTab] = useState<"prompt" | "manual">("prompt");
+  const [feedbackText, setFeedbackText] = useState("");
   const [hasInteracted, setHasInteracted] = useState(false);
   const [selectedSvg, setSelectedSvg] = useState<string | null>(null);
+
+  // alias for existing handlers that reference showRevise
+  const showRevise = feedbackKind;
 
   const isLoading = stepLoading.chef || stepLoading.engineer;
   const error = stepError.engineer;
@@ -546,97 +550,197 @@ export function Step5ChefV2() {
             </div>
           )}
 
-          {/* ── Inline RevisePanel with context label ── */}
-          {showRevise && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeUp 0.2s ease" }}>
-              {/* Context label */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 16px",
-                borderRadius: 10,
-                background: "rgba(21,60,54,0.06)",
-                border: `1px solid rgba(21,60,54,0.14)`,
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                  stroke={T.forest} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: T.forest, fontFamily: "'Geist', sans-serif" }}>
-                    {showRevise === "recipe" ? "Recipe Feedback" : "Shape Feedback"}
-                  </span>
-                  <span style={{ fontSize: 12, color: T.muted, marginLeft: 8, fontFamily: "'Geist', sans-serif" }}>
-                    {showRevise === "recipe"
-                      ? "Describe changes to the recipe, ingredients, or nutrition targets"
-                      : "Describe changes to the print form or shape"}
-                  </span>
-                </div>
+          {/* ── Always-visible Feedback card ── */}
+          <div style={{
+            background: T.card, border: `1.5px solid ${T.border}`,
+            borderRadius: 16, overflow: "hidden",
+          }}>
+            {/* Card title */}
+            <div style={{ padding: "18px 20px 0" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.ink,
+                fontFamily: "'Geist', sans-serif", marginBottom: 14 }}>
+                Feedback
               </div>
-              <RevisePanel
-                onRevisePrompt={handleRevisePrompt}
-                onReviseManual={handleReviseManual}
-                sliderFields={showRevise === "recipe" ? recipeSliders : shapeSliders}
-                loading={stepLoading.chef}
-                error={stepError.chef}
-                onCancel={() => { setShowRevise(null); setStepError("chef", null); }}
-              />
+
+              {/* Recipe | Shape top toggle */}
+              <div style={{ display: "flex", borderBottom: `1px solid ${T.border}` }}>
+                {(["recipe", "shape"] as ReviseKind[]).map((kind) => {
+                  const isActive = feedbackKind === kind;
+                  return (
+                    <button key={kind}
+                      onClick={() => { setFeedbackKind(kind); setStepError("chef", null); setFeedbackText(""); }}
+                      style={{
+                        padding: "9px 20px", fontSize: 13, fontWeight: 600,
+                        fontFamily: "'Geist', sans-serif", cursor: "pointer",
+                        border: "none", background: "transparent",
+                        color: isActive ? T.forest : T.muted,
+                        borderBottom: isActive ? `2px solid ${T.forest}` : "2px solid transparent",
+                        marginBottom: -1,
+                        transition: "color 0.15s, border-color 0.15s",
+                      }}
+                    >
+                      {kind === "recipe" ? "Recipe" : "Shape"}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
+
+            {/* Prompt | Manual sub-tabs */}
+            <div style={{ padding: "0 20px", borderBottom: `1px solid ${T.border}`, display: "flex" }}>
+              {(["prompt", "manual"] as const).map((tab) => {
+                const isActive = feedbackTab === tab;
+                const hasSliders = feedbackKind === "recipe" ? recipeSliders.length > 0 : shapeSliders.length > 0;
+                if (tab === "manual" && !hasSliders) return null;
+                return (
+                  <button key={tab}
+                    onClick={() => setFeedbackTab(tab)}
+                    style={{
+                      padding: "10px 16px", fontSize: 13, fontWeight: 500,
+                      fontFamily: "'Geist', sans-serif", cursor: "pointer",
+                      border: "none", background: "transparent",
+                      color: isActive ? T.ink : T.muted,
+                      borderBottom: isActive ? `2px solid ${T.ink}` : "2px solid transparent",
+                      marginBottom: -1,
+                      transition: "color 0.15s",
+                    }}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Panel body */}
+            <div style={{ padding: "20px" }}>
+              {feedbackTab === "prompt" ? (
+                <>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: T.muted,
+                    fontFamily: "'Geist', sans-serif" }}>
+                    {feedbackKind === "recipe"
+                      ? "Describe changes to the recipe, ingredients, or nutrition targets"
+                      : "Describe changes to the print shape or form"}
+                  </p>
+                  <textarea
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    placeholder={feedbackKind === "recipe"
+                      ? `e.g. "Lower sugar to max 8g, keep protein ratio high"`
+                      : `e.g. "Make it rounder and simpler for 3D printing"`}
+                    rows={3}
+                    disabled={isLoading}
+                    style={{
+                      width: "100%", padding: "10px 12px", fontSize: 13,
+                      border: `1px solid ${T.border}`, borderRadius: 8,
+                      background: T.cream, color: T.ink,
+                      resize: "vertical", fontFamily: "'Geist', sans-serif",
+                      boxSizing: "border-box", outline: "none",
+                    }}
+                  />
+                  {stepError.chef && (
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: T.danger,
+                      fontFamily: "'Geist', sans-serif" }}>
+                      {stepError.chef}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+                    <button
+                      onClick={() => {
+                        if (feedbackText.trim()) {
+                          handleRevisePrompt(feedbackText.trim()).then(() => setFeedbackText(""));
+                        }
+                      }}
+                      disabled={!feedbackText.trim() || isLoading}
+                      style={{
+                        padding: "9px 22px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+                        fontFamily: "'Geist', sans-serif", cursor: !feedbackText.trim() || isLoading ? "not-allowed" : "pointer",
+                        border: "none",
+                        background: !feedbackText.trim() || isLoading ? T.border : T.forest,
+                        color: !feedbackText.trim() || isLoading ? T.muted : T.forestInk,
+                        transition: "background 0.15s",
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}
+                    >
+                      {stepLoading.chef && <Spinner />}
+                      {stepLoading.chef ? "Revising…" : "Revise"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: "0 0 16px", fontSize: 13, color: T.muted,
+                    fontFamily: "'Geist', sans-serif" }}>
+                    Adjust values directly:
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {(feedbackKind === "recipe" ? recipeSliders : shapeSliders).map((field) => (
+                      <div key={field.key}>
+                        <div style={{ display: "flex", justifyContent: "space-between",
+                          marginBottom: 6, fontSize: 13 }}>
+                          <span style={{ color: T.muted, fontFamily: "'Geist', sans-serif" }}>{field.label}</span>
+                          <span style={{ fontWeight: 600, color: T.ink, fontFamily: "'Geist Mono', monospace" }}>
+                            {field.value} <span style={{ color: T.muted, fontWeight: 400 }}>{field.unit}</span>
+                          </span>
+                        </div>
+                        <input type="range" min={field.min} max={field.max} step={field.step}
+                          defaultValue={field.value}
+                          style={{ width: "100%", accentColor: T.forest } as React.CSSProperties}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                    <button
+                      onClick={() => handleReviseManual(
+                        Object.fromEntries((feedbackKind === "recipe" ? recipeSliders : shapeSliders).map((f) => [f.key, f.value]))
+                      )}
+                      disabled={isLoading}
+                      style={{
+                        padding: "9px 22px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+                        fontFamily: "'Geist', sans-serif", cursor: isLoading ? "not-allowed" : "pointer",
+                        border: "none",
+                        background: isLoading ? T.border : T.forest,
+                        color: isLoading ? T.muted : T.forestInk,
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}
+                    >
+                      {stepLoading.chef && <Spinner />}
+                      {stepLoading.chef ? "Applying…" : "Apply"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Bottom bar — always visible */}
+        {/* Bottom bar */}
         <div style={{
-          flexShrink: 0,
-          background: T.card,
+          flexShrink: 0, background: T.card,
           borderTop: `1.5px solid ${T.border}`,
           padding: "14px 28px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12,
         }}>
-          {/* Left: feedback buttons (hidden while panel is open) */}
-          <div style={{ display: "flex", gap: 10 }}>
-            {!showRevise ? (
-              <>
-                <Button variant="secondary" size="md"
-                  onClick={() => setShowRevise("recipe")} disabled={isLoading}>
-                  Recipe feedback
-                </Button>
-                <Button variant="secondary" size="md"
-                  onClick={() => setShowRevise("shape")} disabled={isLoading}>
-                  Shape feedback
-                </Button>
-              </>
-            ) : (
-              <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", alignSelf: "center" }}>
-                Submit or cancel feedback above to continue.
-              </span>
-            )}
-          </div>
-
-          {/* Right: Confirm */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {!hasInteracted && !showRevise && (
-              <p style={{ margin: 0, fontSize: 12, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
-                Select a form or edit the recipe to activate
-              </p>
-            )}
-            <Button
-              variant="primary"
-              size="md"
-              loading={stepLoading.engineer}
-              disabled={isLoading || (!hasInteracted && !stepLoading.engineer)}
-              onClick={handleConfirm}
-              style={{
-                background: hasInteracted && !isLoading ? T.forest : undefined,
-                borderColor: hasInteracted && !isLoading ? T.forest : undefined,
-                color: hasInteracted && !isLoading ? T.forestInk : undefined,
-                borderRadius: 12,
-                fontWeight: 600,
-                padding: "11px 24px",
-                opacity: hasInteracted || stepLoading.engineer ? 1 : 0.45,
-                transition: "opacity 0.2s, background 0.2s",
-              }}
-            >
+          {!hasInteracted && (
+            <p style={{ margin: 0, fontSize: 12, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
+              Select a form or submit feedback to activate
+            </p>
+          )}
+          <Button
+            variant="primary"
+            size="md"
+            loading={stepLoading.engineer}
+            disabled={isLoading || (!hasInteracted && !stepLoading.engineer)}
+            onClick={handleConfirm}
+            style={{
+              background: hasInteracted && !isLoading ? T.forest : undefined,
+              borderColor: hasInteracted && !isLoading ? T.forest : undefined,
+              color: hasInteracted && !isLoading ? T.forestInk : undefined,
+              borderRadius: 12, fontWeight: 600, padding: "11px 24px",
+              opacity: hasInteracted || stepLoading.engineer ? 1 : 0.45,
+              transition: "opacity 0.2s, background 0.2s",
+            }}
+          >
               {stepLoading.engineer ? "Generating…" : "Confirm →"}
             </Button>
           </div>
