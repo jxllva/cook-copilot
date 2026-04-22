@@ -33,8 +33,8 @@ const EVAL_PRESETS: Record<string, { label: string; skip_dietitian: boolean; che
 // ── Default settings ──────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS: AppSettings = {
-  llm_provider: "openai",
-  llm_model: "gpt-4o-mini",
+  llm_provider: "gemini",
+  llm_model: "gemini-3.1-flash-lite-preview",
   use_rag: true,
   rag_sources_enabled: ["nutrition/dietitian_kb.md", "recipe/viscosity_charts.md", "recipe/usda_safe_temperature_chart.md"],
   system_prompts: { dietitian: "", chef: "", engineer: "" },
@@ -47,7 +47,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 const MODELS: Record<string, string[]> = {
   openai:    ["gpt-4o", "gpt-4o-mini", "gpt-5-mini", "gpt-5-nano"],
   anthropic: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  gemini:    ["gemini-2.0-flash", "gemini-1.5-pro"],
+  gemini:    ["gemini-3.1-flash-lite-preview", "gemini-2.0-flash", "gemini-1.5-pro"],
 };
 
 const TAG_COLOR: Record<string, string> = { Prompt: "#4a90d9", RAG: "#e67e22", API: "#27ae60" };
