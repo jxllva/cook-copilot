@@ -134,7 +134,7 @@ export function Step4Dietitian() {
   ];
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "rgb(244, 244, 232)" }}>
       {/* Content */}
       <div
         style={{
@@ -229,7 +229,7 @@ export function Step4Dietitian() {
           style={{
             position: "sticky",
             bottom: 0,
-            background: "var(--bg)",
+            background: "rgb(244, 244, 232)",
             borderTop: "1px solid var(--border)",
             padding: "14px 24px",
             display: "flex",
