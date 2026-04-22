@@ -385,7 +385,7 @@ export function Step5ChefV2() {
         response: result as unknown as Record<string, unknown>,
         timestamp: t0, duration_ms: Date.now() - t0 });
       setChefOutput(result);
-      setShowRevise(null);
+      setFeedbackText("");
       setHasInteracted(true);
     } catch (err) {
       setStepError("chef", err instanceof Error ? err.message : "Revision failed.");

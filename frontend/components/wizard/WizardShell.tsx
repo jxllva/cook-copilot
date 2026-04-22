@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
 import { useWizardStore } from "../../store/wizardStore";
+import { Step1Landing } from "./Step1Landing";
+import { Step2Profile } from "./Step2Profile";
 import { Step3Prompt } from "./Step3Prompt";
 import { ProfileSwitcher } from "./ProfileSwitcher";
 import { Step4Dietitian } from "./Step4Dietitian";
@@ -10,6 +11,7 @@ import { Step5ChefV2 as Step5Chef } from "./Step5ChefV2";
 import { Step6Engineer } from "./Step6Engineer";
 
 const STEP_LABELS: Record<number, string> = {
+  2: "Profile",
   3: "Prompt",
   4: "Nutrition",
   5: "Recipe",
@@ -17,28 +19,48 @@ const STEP_LABELS: Record<number, string> = {
 };
 
 const HEADER_HEIGHT = 72;
+const TRANSITION_MS = 900;
 
 export function WizardShell() {
-  const router = useRouter();
   const { currentStep, goToStep, startOver, dietitianOutput, chefOutput, engineerOutput } = useWizardStore();
 
-  // If somehow we land on step 1 or 2, bump to 3
-  useEffect(() => {
-    if (currentStep < 3) goToStep(3);
-  }, [currentStep, goToStep]);
-
-  // Always use app theme
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", "app");
-  }, []);
-
-  function getStepState(step: number) {
+  function getStepState(step: number): { isDone: boolean; isClickable: boolean } {
     const hasOutput =
       step === 4 ? dietitianOutput !== null :
       step === 5 ? chefOutput !== null :
-      step === 6 ? engineerOutput !== null : false;
+      step === 6 ? engineerOutput !== null :
+      false;
     const isDone = currentStep > step || hasOutput;
-    return { isDone, isClickable: isDone && currentStep !== step };
+    const isClickable = isDone && currentStep !== step;
+    return { isDone, isClickable };
+  }
+
+  // Landing overlay state — controls the slide-up exit animation
+  const [landingVisible, setLandingVisible] = useState(() => currentStep === 1);
+  const [landingExiting, setLandingExiting] = useState(false);
+
+  // Re-show landing instantly when navigating back to step 1
+  useEffect(() => {
+    if (currentStep === 1) {
+      setLandingVisible(true);
+      setLandingExiting(false);
+    }
+  }, [currentStep]);
+
+  // ── Theme switching ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const html = document.documentElement;
+    html.setAttribute("data-theme", currentStep === 1 && !landingExiting ? "landing" : "app");
+  }, [currentStep, landingExiting]);
+
+  // ── Landing "Begin" handler — advances step and starts slide-up animation ────
+  function handleEnter() {
+    goToStep(2);
+    setLandingExiting(true);
+    setTimeout(() => {
+      setLandingVisible(false);
+      setLandingExiting(false);
+    }, TRANSITION_MS);
   }
 
   return (
@@ -58,7 +80,7 @@ export function WizardShell() {
       >
         {/* Logo — back to landing */}
         <button
-          onClick={() => router.push("/")}
+          onClick={() => goToStep(1)}
           style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 0 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -68,9 +90,9 @@ export function WizardShell() {
           </span>
         </button>
 
-        {/* Step progress — steps 3-6 */}
+        {/* Step progress — steps 2-6 */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          {[3, 4, 5, 6].map((step) => {
+          {[2, 3, 4, 5, 6].map((step) => {
             const { isDone, isClickable } = getStepState(step);
             const isActive = currentStep === step;
             return (
@@ -90,15 +112,16 @@ export function WizardShell() {
                   <span style={{
                     width: 20, height: 20, borderRadius: "50%",
                     background: isActive ? "var(--header-fg)" : isDone ? "rgba(240,240,240,0.3)" : "rgba(255,255,255,0.1)",
-                    color: isActive ? "var(--header-bg)" : "var(--header-fg2)",
+                    color: isActive ? "var(--header-bg)" : isDone ? "var(--header-bg)" : "var(--header-fg2)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, fontWeight: 600, flexShrink: 0,
+                    transition: "background 0.2s",
                   }}>
-                    {isDone && !isActive ? (
+                    {isDone ? (
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                         <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                    ) : step - 2}
+                    ) : step - 1}
                   </span>
                   <span style={{ fontSize: 12, color: isActive ? "var(--header-fg)" : "var(--header-fg2)", fontWeight: isActive ? 600 : 400 }}>
                     {STEP_LABELS[step]}
@@ -114,7 +137,7 @@ export function WizardShell() {
 
         {/* Right actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {currentStep > 3 && (
+          {currentStep > 2 && (
             <button
               onClick={startOver}
               style={{
@@ -149,11 +172,30 @@ export function WizardShell() {
       </header>
 
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
+        {currentStep === 2 && <Step2Profile />}
         {currentStep === 3 && <Step3Prompt />}
         {currentStep === 4 && <Step4Dietitian />}
         {currentStep === 5 && <Step5Chef />}
         {currentStep === 6 && <Step6Engineer />}
       </main>
+
+      {/* Landing overlay — dissolves away on "Begin" */}
+      {landingVisible && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            opacity: landingExiting ? 0 : 1,
+            transform: landingExiting ? "translateY(-48px) scale(1.03)" : "translateY(0) scale(1)",
+            transition: landingExiting
+              ? `opacity ${TRANSITION_MS}ms cubic-bezier(0.4, 0, 0.6, 1), transform ${TRANSITION_MS}ms cubic-bezier(0.4, 0, 0.6, 1)`
+              : "none",
+          }}
+        >
+          <Step1Landing onEnter={handleEnter} />
+        </div>
+      )}
     </div>
   );
 }
