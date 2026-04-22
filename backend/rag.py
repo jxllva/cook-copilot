@@ -4,7 +4,7 @@ RAG (Retrieval-Augmented Generation) module for CookCopilot.
 Architecture:
   1. Load   — read KB files from disk (.md, .txt, .pdf, .docx)
   2. Chunk  — split into semantically meaningful sections
-  3. Embed  — compute OpenAI embeddings for each chunk
+  3. Embed  — compute Google Gemini embeddings for each chunk
   4. Store  — persist in ChromaDB (local, file-based)
   5. Query  — retrieve top-k relevant chunks for a given query
   6. Format — return retrieved context as a string for LLM injection
@@ -27,15 +27,13 @@ import shutil                          # ← FIX 1: added for rmtree
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from langchain_openai import OpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
-client = OpenAI()
 
 # ---------------------------------------------------------------------------
 # Config
@@ -193,8 +191,8 @@ class KnowledgeBaseStore:
     """
 
     def __init__(self):
-        self._embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small"
+        self._embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-001"
         )
         self._stores: Dict[str, Chroma] = {}
         self._hashes: Dict[str, str] = {}
