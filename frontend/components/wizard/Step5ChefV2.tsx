@@ -227,7 +227,7 @@ function ContourPreviewV2({
             key={`${selected}-${active.imgSrc.length}`}
             src={active.imgSrc}
             alt={`${displayName} — ${active.label}`}
-            style={{ maxWidth: "100%", maxHeight: 180, objectFit: "contain", animation: "fadeIn 0.2s ease" }}
+            style={{ maxWidth: "100%", maxHeight: 180, objectFit: "contain", animation: "fadeIn 0.2s ease", mixBlendMode: "multiply" }}
           />
         ) : (
           <div style={{ textAlign: "center", color: "#BBBBBB" }}>
@@ -277,7 +277,7 @@ function ContourPreviewV2({
               <div style={{ width: 52, height: 52, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {v.imgSrc ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.imgSrc} alt={v.label} width={44} height={44} style={{ objectFit: "contain" }} />
+                  <img src={v.imgSrc} alt={v.label} width={44} height={44} style={{ objectFit: "contain", mixBlendMode: "multiply" }} />
                 ) : (
                   <ShimmerBlock width={44} height={44} radius={8} />
                 )}
@@ -425,7 +425,10 @@ export function Step5ChefV2() {
     try {
       let effectiveChefOutput = chefOutput;
       if (selectedSvg) {
-        const b64 = await svgToB64(selectedSvg);
+        // If already a PNG data URL, extract b64 directly instead of re-encoding via canvas
+        const b64 = selectedSvg.startsWith("data:image/png;base64,")
+          ? selectedSvg.split(",")[1]
+          : await svgToB64(selectedSvg);
         effectiveChefOutput = { ...chefOutput, silhouette_image_b64: b64 };
       }
       const result = await runEngineer(prompt, effectiveChefOutput, profile?.age ?? 0, parsedPrompt?.meal_type ?? "");
@@ -597,48 +600,7 @@ export function Step5ChefV2() {
             </div>
           )}
 
-          {/* KB chunks */}
-          {chefOutput.retrieved_chunks && chefOutput.retrieved_chunks.length > 0 && (
-            <details>
-              <summary style={{
-                cursor: "pointer", fontSize: 12, fontWeight: 600, color: T.muted,
-                userSelect: "none", marginBottom: 8,
-                fontFamily: "'Geist Mono', monospace",
-              }}>
-                Retrieved KB Chunks ({chefOutput.retrieved_chunks.length})
-              </summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {chefOutput.retrieved_chunks.map((chunk, i) => (
-                  <div key={i} style={{
-                    padding: "10px 14px", borderRadius: 10,
-                    background: T.card, border: `1.5px solid ${T.border}`,
-                    fontSize: 12, color: T.ink, lineHeight: 1.6,
-                    fontFamily: "'Geist', sans-serif",
-                  }}>
-                    <div style={{ fontWeight: 600, color: T.muted, marginBottom: 4, fontSize: 11,
-                      fontFamily: "'Geist Mono', monospace" }}>
-                      score: {chunk.score.toFixed(4)}
-                      {chunk.metadata?.source ? ` · ${chunk.metadata.source}` : ""}
-                    </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>{chunk.content}</div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {/* Engineer error */}
-          {error && (
-            <div style={{
-              padding: "12px 16px", borderRadius: 10,
-              background: T.dangerBg, border: `1px solid #fcc`,
-              color: T.danger, fontSize: 13, fontFamily: "'Geist', sans-serif",
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* ── Always-visible Feedback card ── */}
+          {/* ── Feedback card — Recipe & Shape tabs ── */}
           <div style={{
             background: T.card, border: `1.5px solid ${T.border}`,
             borderRadius: 16, overflow: "hidden",
@@ -810,6 +772,47 @@ export function Step5ChefV2() {
               )}
             </div>
           </div>
+
+          {/* Engineer error */}
+          {error && (
+            <div style={{
+              padding: "12px 16px", borderRadius: 10,
+              background: T.dangerBg, border: `1px solid #fcc`,
+              color: T.danger, fontSize: 13, fontFamily: "'Geist', sans-serif",
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* KB chunks */}
+          {chefOutput.retrieved_chunks && chefOutput.retrieved_chunks.length > 0 && (
+            <details>
+              <summary style={{
+                cursor: "pointer", fontSize: 12, fontWeight: 600, color: T.muted,
+                userSelect: "none", marginBottom: 8,
+                fontFamily: "'Geist Mono', monospace",
+              }}>
+                Retrieved KB Chunks ({chefOutput.retrieved_chunks.length})
+              </summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {chefOutput.retrieved_chunks.map((chunk, i) => (
+                  <div key={i} style={{
+                    padding: "10px 14px", borderRadius: 10,
+                    background: T.card, border: `1.5px solid ${T.border}`,
+                    fontSize: 12, color: T.ink, lineHeight: 1.6,
+                    fontFamily: "'Geist', sans-serif",
+                  }}>
+                    <div style={{ fontWeight: 600, color: T.muted, marginBottom: 4, fontSize: 11,
+                      fontFamily: "'Geist Mono', monospace" }}>
+                      score: {chunk.score.toFixed(4)}
+                      {chunk.metadata?.source ? ` · ${chunk.metadata.source}` : ""}
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{chunk.content}</div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
 
         {/* Bottom bar */}
@@ -828,11 +831,6 @@ export function Step5ChefV2() {
 
           {/* Right: Confirm */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {!hasInteracted && !showRevise && (
-              <p style={{ margin: 0, fontSize: 12, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
-                Select a form or edit the recipe to activate
-              </p>
-            )}
             <Button
               variant="primary"
               size="md"
@@ -844,17 +842,15 @@ export function Step5ChefV2() {
                 "Mapping syringe layers…",
                 "Optimizing the toolpath…",
               ]}
-              disabled={isLoading || (!hasInteracted && !stepLoading.engineer)}
+              disabled={isLoading}
               onClick={handleConfirm}
               style={{
-                background: hasInteracted && !isLoading ? T.forest : undefined,
-                borderColor: hasInteracted && !isLoading ? T.forest : undefined,
-                color: hasInteracted && !isLoading ? T.forestInk : undefined,
+                background: !isLoading ? T.forest : undefined,
+                borderColor: !isLoading ? T.forest : undefined,
+                color: !isLoading ? T.forestInk : undefined,
                 borderRadius: 12,
                 fontWeight: 600,
                 padding: "11px 24px",
-                opacity: hasInteracted || stepLoading.engineer ? 1 : 0.45,
-                transition: "opacity 0.2s, background 0.2s",
               }}
             >
               Confirm →
