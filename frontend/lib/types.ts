@@ -22,7 +22,6 @@ export type Allergen =
 
 /** Medical conditions relevant to nutrition planning */
 export type MedicalCondition =
-  | "pregnancy"
   | "gestational_diabetes"
   | "type1_diabetes"
   | "type2_diabetes"

@@ -41,7 +41,6 @@ const ALLERGEN_OPTIONS: { value: Allergen; label: string }[] = [
 
 const MEDICAL_OPTIONS: { value: MedicalCondition; label: string }[] = [
   { value: "none", label: "None" },
-  { value: "pregnancy", label: "Pregnancy" },
   { value: "gestational_diabetes", label: "Gestational Diabetes" },
   { value: "type1_diabetes", label: "Type 1 Diabetes" },
   { value: "type2_diabetes", label: "Type 2 Diabetes" },
@@ -136,6 +135,45 @@ function CheckChip({
     >
       {label}
     </button>
+  );
+}
+
+// ── Number input (string-buffered to prevent controlled-input fighting) ───────
+
+function NumberInput({
+  value,
+  onChange,
+  min,
+  max,
+  placeholder,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  placeholder?: string;
+}) {
+  const [raw, setRaw] = React.useState(value === 0 ? "" : String(value));
+
+  React.useEffect(() => {
+    setRaw(value === 0 ? "" : String(value));
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      style={inputStyle}
+      placeholder={placeholder}
+      value={raw}
+      onChange={(e) => {
+        const str = e.target.value.replace(/[^0-9]/g, "");
+        setRaw(str);
+        const n = str === "" ? 0 : Number(str);
+        if (str !== "" && min !== undefined && max !== undefined && (n < min || n > max)) return;
+        onChange(n);
+      }}
+    />
   );
 }
 
@@ -412,34 +450,13 @@ export function Step2Profile() {
                 </select>
               </Field>
               <Field label="Age (years)" half>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  min={1}
-                  max={120}
-                  value={form.age || ""}
-                  onChange={(e) => setField("age", Number(e.target.value))}
-                />
+                <NumberInput value={form.age} min={1} max={120} placeholder="e.g. 30" onChange={(n) => setField("age", n)} />
               </Field>
               <Field label="Height (cm)" half>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  min={50}
-                  max={300}
-                  value={form.heightCm || ""}
-                  onChange={(e) => setField("heightCm", Number(e.target.value))}
-                />
+                <NumberInput value={form.heightCm} min={50} max={300} placeholder="e.g. 170" onChange={(n) => setField("heightCm", n)} />
               </Field>
               <Field label="Weight (kg)" half>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  min={1}
-                  max={500}
-                  value={form.weightKg || ""}
-                  onChange={(e) => setField("weightKg", Number(e.target.value))}
-                />
+                <NumberInput value={form.weightKg} min={1} max={500} placeholder="e.g. 65" onChange={(n) => setField("weightKg", n)} />
               </Field>
             </div>
           </section>

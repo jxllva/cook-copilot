@@ -82,7 +82,6 @@ const ACTIVITIES = [
 const ALLERGIES = ["Peanuts", "Tree nuts", "Dairy", "Eggs", "Wheat/Gluten", "Soy", "Fish", "Shellfish", "Sesame"];
 const MEDICAL_CONDITIONS = [
   "None",
-  "Pregnancy",
   "Gestational Diabetes",
   "Type 1 Diabetes",
   "Type 2 Diabetes",
@@ -643,7 +642,7 @@ const ALLERGY_MAP: Record<string, Allergen> = {
   "Wheat/Gluten": "wheat_gluten", Soy: "soy", Fish: "fish", Shellfish: "shellfish", Sesame: "sesame",
 };
 const CONDITION_MAP: Record<string, MedicalCondition> = {
-  None: "none", Pregnancy: "pregnancy", "Gestational Diabetes": "gestational_diabetes",
+  None: "none", "Gestational Diabetes": "gestational_diabetes",
   "Type 1 Diabetes": "type1_diabetes", "Type 2 Diabetes": "type2_diabetes",
   Hypertension: "hypertension", "Cardiovascular Disease": "cardiovascular_disease",
   "Celiac Disease": "celiac_disease", "IBS / IBD": "ibs_ibd", "Kidney Disease": "kidney_disease",

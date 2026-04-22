@@ -26,7 +26,7 @@ const ALLERGEN_LABELS: Record<Allergen, string> = {
 };
 
 const CONDITION_LABELS: Record<MedicalCondition, string> = {
-  none: "None", pregnancy: "Pregnancy", gestational_diabetes: "Gestational Diabetes",
+  none: "None", gestational_diabetes: "Gestational Diabetes",
   type1_diabetes: "Type 1 Diabetes", type2_diabetes: "Type 2 Diabetes",
   hypertension: "Hypertension", cardiovascular_disease: "Cardiovascular Disease",
   celiac_disease: "Celiac Disease", ibs_ibd: "IBS / IBD", kidney_disease: "Kidney Disease",
@@ -163,7 +163,7 @@ export function EditProfileModal({
             ].map(({ label, val, set }) => (
               <div key={label} style={{ flex: 1 }}>
                 <label style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", letterSpacing: ".08em", textTransform: "uppercase", color: "#6B5D50", display: "block", marginBottom: 6 }}>{label}</label>
-                <input type="number" min="0" value={val} onChange={(e) => set(e.target.value)} placeholder="—" style={inputStyle} />
+                <input type="text" inputMode="numeric" value={val} onChange={(e) => set(e.target.value.replace(/[^0-9]/g, ""))} placeholder="—" style={inputStyle} />
               </div>
             ))}
           </div>
