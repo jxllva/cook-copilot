@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useWizardStore } from "../../store/wizardStore";
 import { Button } from "../ui/Button";
 import { StageLoader } from "../ui/StageLoader";
-import { runParse, runChef, runEngineer, runSilhouettes } from "../../lib/api";
+import { runParse, runChef, runEngineer, runSilhouette } from "../../lib/api";
 import { NutritionFactsTable } from "../chef/NutritionFactsTable";
 import { saveRecipe, isRecipeSaved, unsaveRecipe } from "../../lib/savedRecipes";
 import type { SyringeRecipe } from "../../lib/types";
@@ -173,22 +173,39 @@ function ContourPreviewV2({
     setFetching(true);
     setSelected(0);
     setVariants(EMPTY_VARIANTS);
-    runSilhouettes(shapeName)
-      .then(({ variants: fetched }) => {
-        const updated: ShapeVariant[] = fetched.map((v) => ({
-          label: v.label,
-          description: v.description,
-          imgSrc: toImgSrc(v),
-          rawSvg: v.svg ?? null,
-        }));
-        setVariants(updated);
-        // Pass raw SVG or imgSrc for engineer handoff
-        const first = updated[0];
-        if (first?.rawSvg) onSelectSvg?.(first.rawSvg);
-        else if (first?.imgSrc) onSelectSvg?.(first.imgSrc);
-      })
-      .catch((err) => console.error("[ContourPreview] fetch failed:", err))
-      .finally(() => setFetching(false));
+
+    let firstResolved = false;
+
+    // Fetch all 3 variants in parallel; render each as it arrives
+    const promises = EMPTY_VARIANTS.map((_, idx) =>
+      runSilhouette(shapeName, idx)
+        .then((v) => {
+          if (!v) return;
+          const updated: ShapeVariant = {
+            label: v.label,
+            description: v.description,
+            imgSrc: toImgSrc(v),
+            rawSvg: v.svg ?? null,
+          };
+          setVariants((prev) => {
+            const next = [...prev];
+            next[idx] = updated;
+            return next;
+          });
+          // Pass the first variant that resolves to engineer as the default shape
+          if (!firstResolved) {
+            firstResolved = true;
+            if (updated.rawSvg) onSelectSvg?.(updated.rawSvg);
+            else if (updated.imgSrc) onSelectSvg?.(updated.imgSrc);
+          }
+          // Hide shimmer once at least the first variant is loaded
+          setFetching(false);
+        })
+        .catch((err) => console.error(`[ContourPreview] variant ${idx} failed:`, err))
+    );
+
+    // Ensure fetching is cleared once all settle
+    Promise.allSettled(promises).then(() => setFetching(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shapeName]);
 

@@ -11,10 +11,11 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Header
 from pydantic import BaseModel
 
 from schemas.profiles import UserProfileCreate
+from core.posthog_client import get_posthog
 
 router = APIRouter()
 
@@ -148,6 +149,20 @@ def _run_batch(job: BatchJob, inputs: List[BatchInput]) -> None:
         job.error = str(e)
     finally:
         job.finished_at = time.time()
+        posthog = get_posthog()
+        error_count = sum(1 for r in job.results if r.error)
+        posthog.capture(
+            "batch run completed",
+            properties={
+                "run_id": job.run_id,
+                "stage": job.stage,
+                "n": job.n,
+                "completed": job.completed,
+                "status": job.status,
+                "error_count": error_count,
+                "duration_s": round((job.finished_at - job.started_at), 1) if job.started_at else 0,
+            },
+        )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -156,6 +171,8 @@ def _run_batch(job: BatchJob, inputs: List[BatchInput]) -> None:
 async def start_batch_run(
     req: BatchRunRequest,
     background_tasks: BackgroundTasks,
+    x_posthog_distinct_id: Optional[str] = Header(None),
+    x_posthog_session_id: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     if req.n < 1 or req.n > 100:
         raise HTTPException(status_code=400, detail="n must be between 1 and 100")
@@ -167,6 +184,18 @@ async def start_batch_run(
     run_id = str(uuid.uuid4())[:8]
     job = BatchJob(run_id=run_id, stage=req.stage, n=req.n, started_at=time.time())
     _batch_jobs[run_id] = job
+
+    posthog = get_posthog()
+    posthog.capture(
+        "batch run started",
+        distinct_id=x_posthog_distinct_id or "anonymous",
+        properties={
+            "run_id": run_id,
+            "stage": req.stage,
+            "n": req.n,
+            "input_count": len(req.inputs),
+        },
+    )
 
     background_tasks.add_task(_run_batch, job, req.inputs)
     return {"run_id": run_id, "n": req.n, "stage": req.stage, "status": "running"}

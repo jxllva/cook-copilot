@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
+from core.posthog_client import init_posthog
 from db.connection import db_init
 from rag import kb_store
 
@@ -59,6 +60,7 @@ KB_EXTENSIONS = {".md", ".txt", ".pdf", ".docx"}
 @app.on_event("startup")
 def startup() -> None:
     """Initialize DB tables and index all knowledge base files."""
+    init_posthog()
     db_init()
     _index_knowledge_bases()
 

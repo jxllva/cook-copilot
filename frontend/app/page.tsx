@@ -340,6 +340,46 @@ function ProfileCard({
   );
 }
 
+// ─── Numeric field ────────────────────────────────────────────────────────────
+// Must live outside ProfileModal so React sees a stable component identity across
+// re-renders. Defined inside a parent = remounted on every parent render = local
+// state lost after each keystroke.
+
+function NumericField({
+  value,
+  onChange,
+  placeholder,
+  borderColor,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  borderColor: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const prevParent = useRef(value);
+  if (prevParent.current !== value) {
+    prevParent.current = value;
+    setLocal(value);
+  }
+  return (
+    <input
+      type="number"
+      min="1"
+      value={local}
+      onChange={(e) => { setLocal(e.target.value); onChange(e.target.value); }}
+      placeholder={placeholder}
+      style={{
+        padding: "11px 13px", borderRadius: 10, width: "100%",
+        border: `1.5px solid ${borderColor}`,
+        background: "transparent", color: THEME.ink,
+        fontFamily: "'Geist', sans-serif", fontSize: 15, outline: "none",
+        boxSizing: "border-box",
+      }}
+    />
+  );
+}
+
 // ─── Profile Modal ────────────────────────────────────────────────────────────
 
 function ProfileModal({
@@ -559,12 +599,11 @@ function ProfileModal({
               ].map(({ label, field, error }) => (
                 <div key={field} style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
                   <Label text={label} required />
-                  <TextInput
-                    type="number" min="1"
+                  <NumericField
                     value={data[field]}
-                    onChange={(e) => upd({ [field]: e.target.value })}
+                    onChange={(v) => upd({ [field]: v })}
                     placeholder="—"
-                    error={error}
+                    borderColor={error ? "#DC2626" : THEME.cardBorder + "60"}
                   />
                   <ErrorMsg msg={error} />
                 </div>
