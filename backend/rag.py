@@ -191,11 +191,16 @@ class KnowledgeBaseStore:
     """
 
     def __init__(self):
-        self._embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-001"
-        )
+        self._embeddings = None  # lazy — only created when RAG is actually used
         self._stores: Dict[str, Chroma] = {}
         self._hashes: Dict[str, str] = {}
+
+    def _get_embeddings(self) -> GoogleGenerativeAIEmbeddings:
+        if self._embeddings is None:
+            self._embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/gemini-embedding-001"
+            )
+        return self._embeddings
 
     # ---- public API -------------------------------------------------------
 
@@ -235,7 +240,7 @@ class KnowledgeBaseStore:
 
         store = Chroma.from_documents(
             documents=docs,
-            embedding=self._embeddings,
+            embedding=self._get_embeddings(),
             collection_name=col_name,
             persist_directory=persist_dir,
         )
