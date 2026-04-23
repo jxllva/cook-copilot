@@ -26,8 +26,8 @@ class ChefSectionsEnabled(BaseModel):
 
 
 class AppSettings(BaseModel):
-    llm_provider: str = "gemini"      # "openai" | "anthropic" | "gemini"
-    llm_model: str = "gemini-3.1-flash-lite-preview"
+    llm_provider: str = "openai"      # "openai" | "anthropic" | "gemini"
+    llm_model: str = "gpt-4o-mini"
     use_rag: bool = True
     rag_sources_enabled: List[str] = [
         "nutrition/dietitian_kb.md",

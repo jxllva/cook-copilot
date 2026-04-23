@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     kb_dir: str = "knowledgebases"
 
     # Default LLM settings (can be overridden per-session via /api/settings)
-    default_llm_provider: str = "gemini"
-    default_llm_model: str = "gemini-3.1-flash-lite-preview"
+    default_llm_provider: str = "openai"
+    default_llm_model: str = "gpt-4o-mini"
 
     # PostHog analytics
     posthog_api_key: str = ""
