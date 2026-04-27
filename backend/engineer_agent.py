@@ -88,7 +88,7 @@ def _generate_silhouette(shape_description: str) -> Optional[bytes]:
     )
     try:
         response = client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-2.5-flash-image",
             contents=[prompt],
         )
         for part in response.parts:
