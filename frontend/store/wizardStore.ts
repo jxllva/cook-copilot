@@ -21,6 +21,7 @@ import type {
   ChefResponse,
   EngineerResponse,
   PipelineLogEntry,
+  ShapeVariant,
 } from "../lib/types";
 
 // ── Default empty profile for the creation form ───────────────────────────────
@@ -74,11 +75,14 @@ interface WizardState {
   engineerOutput: EngineerResponse | null;
   gcode: string;
   silhouetteB64: string | null;
+  silhouetteVariants: ShapeVariant[] | null;
+  silhouetteVariantsShape: string | null;
 
   setDietitianOutput: (d: DietitianResponse) => void;
   setChefOutput: (c: ChefResponse) => void;
   setEngineerOutput: (e: EngineerResponse) => void;
   setGcode: (g: string) => void;
+  setSilhouetteVariants: (shape: string, variants: ShapeVariant[]) => void;
 
   // ── Session: loading / error per stage ──────────────────────────────────────
   stepLoading: Record<"dietitian" | "chef" | "engineer", boolean>;
@@ -168,6 +172,8 @@ export const useWizardStore = create<WizardState>()(
       engineerOutput: null,
       gcode: "",
       silhouetteB64: null,
+      silhouetteVariants: null,
+      silhouetteVariantsShape: null,
 
       setDietitianOutput: (d) => set({ dietitianOutput: d }),
       setChefOutput: (c) =>
@@ -184,6 +190,8 @@ export const useWizardStore = create<WizardState>()(
           silhouetteB64: e.silhouette_image_b64,
         }),
       setGcode: (g) => set({ gcode: g }),
+      setSilhouetteVariants: (shape, variants) =>
+        set({ silhouetteVariants: variants, silhouetteVariantsShape: shape }),
 
       // ── Loading / error ───────────────────────────────────────────────────────
       stepLoading: { dietitian: false, chef: false, engineer: false },
@@ -220,6 +228,8 @@ export const useWizardStore = create<WizardState>()(
           engineerOutput: null,
           gcode: "",
           silhouetteB64: null,
+          silhouetteVariants: null,
+          silhouetteVariantsShape: null,
           stepLoading: { dietitian: false, chef: false, engineer: false },
           stepError: { dietitian: null, chef: null, engineer: null },
           pipelineLog: [],
