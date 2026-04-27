@@ -505,7 +505,7 @@ def _generate_silhouette_image(requirement: Dict[str, Any]) -> Optional[str]:
             f"Like a flat rubber stamp. Centered, 2D."
         )
         response = client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-2.5-flash-image",
             contents=[prompt],
         )
         for part in response.parts:

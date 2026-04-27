@@ -121,6 +121,17 @@ export async function runDietitian(
   });
 }
 
+/** Refine existing nutrition targets via free-text user request */
+export async function refineDietitian(
+  currentTargets: DietitianResponse,
+  refinement: string
+): Promise<DietitianResponse> {
+  return post<DietitianResponse>("/api/dietitian/refine", {
+    current_targets: currentTargets,
+    refinement,
+  });
+}
+
 /** Run the Chef AI stage: designs syringe recipes meeting nutrition targets */
 export async function runChef(
   nutritionTargets: NutritionTargets,

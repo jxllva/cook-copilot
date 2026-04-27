@@ -121,6 +121,14 @@ class EngineerResponse(BaseModel):
     pieces: int = 1
 
 
+# ── Dietitian Refine ─────────────────────────────────────────────────────────
+
+class DietitianRefineRequest(BaseModel):
+    current_targets: DietitianResponse
+    refinement: str
+    model: str = "gemini-3.1-flash-lite-preview"
+
+
 # ── GCode Regenerate ──────────────────────────────────────────────────────────
 
 class GCodeRegenerateRequest(BaseModel):
