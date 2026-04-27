@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sys
 import os
+import json
 from typing import Any, Dict
 
 # Ensure parent (backend/) is on the path so legacy agent modules can be imported
@@ -64,6 +65,55 @@ def _build_requirement(profile: UserProfileCreate, meal_type: str) -> Dict[str, 
             "constraints_text": profile.dietaryPreferences,
         },
         "nutrition": {},
+    }
+
+
+def refine(current: Dict[str, Any], refinement: str, model: str = "gemini-3.1-flash-lite-preview") -> Dict[str, Any]:
+    """
+    Adjust existing nutrition targets based on free-text user refinement.
+
+    Uses Gemini to parse the request and produce updated targets while keeping
+    other fields (allergens, meal_type, etc.) from the original response.
+    """
+    from llm.gemini_provider import GeminiProvider
+
+    system = (
+        "You are a clinical dietitian assistant. "
+        "You will receive current nutrition targets (as JSON) and a user refinement request. "
+        "Return ONLY a JSON object with the same structure as `nutrition_targets` in the input, "
+        "updated to reflect the user's request. "
+        "Keep macro_percent values summing to 100. Keep kcal and sugar_g as {min, max} objects. "
+        "Do not add or remove keys."
+    )
+
+    nt_json = json.dumps(current.get("nutrition_targets", {}), indent=2)
+    user_msg = (
+        f"Current nutrition targets:\n{nt_json}\n\n"
+        f"User request: {refinement}\n\n"
+        "Return the updated nutrition_targets JSON object only."
+    )
+
+    provider = GeminiProvider()
+    raw = provider.chat(
+        model=model,
+        system=system,
+        messages=[{"role": "user", "content": user_msg}],
+        temperature=0.3,
+    )
+
+    # Strip markdown code fences if present
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+
+    updated_nt = json.loads(text)
+
+    return {
+        **current,
+        "nutrition_targets": updated_nt,
     }
 
 
