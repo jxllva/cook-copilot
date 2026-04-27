@@ -763,7 +763,7 @@ export function Step5ChefV2() {
 
         {/* Bottom bar */}
         <div className="no-print" style={{
-          flexShrink: 0, background: T.card,
+          flexShrink: 0, background: T.cream,
           borderTop: `1.5px solid ${T.border}`,
           padding: "14px 28px",
           display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,
