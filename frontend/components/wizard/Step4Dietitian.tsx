@@ -157,24 +157,10 @@ export function Step4Dietitian() {
   const isLoading = stepLoading.dietitian || stepLoading.chef;
   const error = stepError.dietitian || stepError.chef;
 
-  // ── Daily target slider state
-  const originalDailyTarget = dietitianOutput?.daily_reference?.daily_target ?? 2000;
-  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (dietitianOutput?.daily_reference?.daily_target) {
-      setDailyTarget(Math.round(dietitianOutput.daily_reference.daily_target));
-    }
-  }, [dietitianOutput?.daily_reference?.daily_target]);
-
-  const effectiveDailyTarget = dailyTarget ?? Math.round(originalDailyTarget);
-  const ratio = originalDailyTarget > 0 ? effectiveDailyTarget / originalDailyTarget : 1;
-  const displayKcalMin = Math.round((dietitianOutput?.nutrition_targets.kcal.min ?? 0) * ratio);
-  const displayKcalMax = Math.round((dietitianOutput?.nutrition_targets.kcal.max ?? 0) * ratio);
-
-  const isTooLow = effectiveDailyTarget < 1200;
-  const isTooHigh = effectiveDailyTarget > 3500;
-  const hasWarning = isTooLow || isTooHigh;
+  // ── Fixed daily target (no slider)
+  const effectiveDailyTarget = dietitianOutput?.daily_reference?.daily_target ?? 2000;
+  const displayKcalMin = dietitianOutput?.nutrition_targets.kcal.min ?? 0;
+  const displayKcalMax = dietitianOutput?.nutrition_targets.kcal.max ?? 0;
 
   // ── Confirm
   async function handleConfirm() {
@@ -182,19 +168,14 @@ export function Step4Dietitian() {
     setStepLoading("chef", true);
     setStepError("chef", null);
     const t0 = Date.now();
-    const adjustedOutput = {
-      ...dietitianOutput,
-      nutrition_targets: { ...dietitianOutput.nutrition_targets, kcal: { min: displayKcalMin, max: displayKcalMax } },
-      daily_reference: { ...dietitianOutput.daily_reference, daily_target: effectiveDailyTarget },
-    };
     try {
       const result = await runChef(
-        adjustedOutput.nutrition_targets, adjustedOutput.allergens,
+        dietitianOutput.nutrition_targets, dietitianOutput.allergens,
         profile?.age ?? 0, profile?.sex ?? "", profile?.dietaryPreferences ?? [],
-        parsedPrompt?.shape ?? "", parsedPrompt?.meal_type ?? adjustedOutput.meal_type,
+        parsedPrompt?.shape ?? "", parsedPrompt?.meal_type ?? dietitianOutput.meal_type,
         parsedPrompt?.ingredients ?? [], parsedPrompt?.menu ?? ""
       );
-      appendLog({ stage: "chef", request: { prompt, nutrition_targets: adjustedOutput.nutrition_targets }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
+      appendLog({ stage: "chef", request: { prompt, nutrition_targets: dietitianOutput.nutrition_targets }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
       setChefOutput(result);
       goToStep(5);
     } catch (err) {
@@ -242,24 +223,14 @@ export function Step4Dietitian() {
   const mealType = dietitianOutput.meal_type;
   const allergens = dietitianOutput.allergens;
 
-  const sliderMin = Math.max(800, Math.round(originalDailyTarget * 0.4));
-  const sliderMax = Math.round(originalDailyTarget * 1.8);
-  const sliderPct = Math.max(0, Math.min(100, ((effectiveDailyTarget - sliderMin) / (sliderMax - sliderMin)) * 100));
-  const sliderColor = isTooLow ? "#EF4444" : isTooHigh ? "#F59E0B" : T.forest;
-
   const carbDeg = (macro_percent.carbs / 100) * 360;
   const proteinDeg = (macro_percent.protein / 100) * 360;
   const donutGradient = `conic-gradient(${T.teal} 0deg ${carbDeg}deg, ${T.orange} ${carbDeg}deg ${carbDeg + proteinDeg}deg, ${T.amber} ${carbDeg + proteinDeg}deg 360deg)`;
-
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: T.cream }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        input[type=range].nt-slider { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; outline: none; cursor: pointer; width: 100%; display: block; }
-        input[type=range].nt-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid ${T.forest}; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-top: -8px; }
-        input[type=range].nt-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; }
-        input[type=range].nt-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid ${T.forest}; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
       `}</style>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "36px 32px", maxWidth: 960, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
@@ -335,51 +306,22 @@ export function Step4Dietitian() {
               )}
             </div>
 
-            {/* ── Card 2: Daily target slider + Restrictions ── */}
+            {/* ── Card 2: Daily target (fixed) + Restrictions ── */}
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "24px 28px" }}>
               {/* Daily target section */}
               <div style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500, marginBottom: 18 }}>
                 Daily Nutrition Targets
               </div>
 
-              <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 44, fontWeight: 700, color: T.ink, fontFamily: "'Geist', sans-serif", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                  {effectiveDailyTarget.toLocaleString()}
+                  {Math.round(effectiveDailyTarget).toLocaleString()}
                 </div>
                 <div style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", marginTop: 5 }}>kcal/day</div>
               </div>
 
-              <input
-                type="range"
-                className="nt-slider"
-                min={sliderMin}
-                max={sliderMax}
-                step={10}
-                value={effectiveDailyTarget}
-                onChange={(e) => setDailyTarget(Number(e.target.value))}
-                style={{
-                  background: `linear-gradient(to right, ${sliderColor} 0%, ${sliderColor} ${sliderPct}%, #E5E7EB ${sliderPct}%, #E5E7EB 100%)`,
-                }}
-              />
-
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist', sans-serif" }}>{sliderMin.toLocaleString()} kcal</span>
-                <span style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist', sans-serif" }}>{sliderMax.toLocaleString()} kcal</span>
-              </div>
-
-              {hasWarning && (
-                <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: isTooLow ? T.errorBg : T.warnBg, border: `1px solid ${isTooLow ? T.errorBorder : T.warnBorder}`, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 15, lineHeight: "1.3" }}>{isTooLow ? "⚠️" : "💡"}</span>
-                  <span style={{ fontSize: 13, color: isTooLow ? T.errorText : "#92400E", fontFamily: "'Geist', sans-serif", lineHeight: 1.5 }}>
-                    {isTooLow
-                      ? "Below the typical safe minimum (1,200 kcal/day). Very low targets should be supervised by a healthcare professional."
-                      : "This exceeds a typical daily energy need. Make sure this target fits your goals."}
-                  </span>
-                </div>
-              )}
-
               {/* Restrictions divider */}
-              <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
+              <div style={{ paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>
                     Restrictions
@@ -407,7 +349,7 @@ export function Step4Dietitian() {
               </div>
             </div>
 
-            {/* ── Refine section (like Recipe tab) ── */}
+            {/* ── Refine section ── */}
             <div>
               <h3 style={{
                 margin: "0 0 16px", fontSize: 22,
