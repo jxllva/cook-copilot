@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { useWizardStore } from "../../store/wizardStore";
 import { Button } from "../ui/Button";
 import { StageLoader } from "../ui/StageLoader";
-import { runParse, runChef, runEngineer, runSilhouette } from "../../lib/api";
+import { runParse, runChef, runEngineer, runSilhouettes } from "../../lib/api";
 import { NutritionFactsTable } from "../chef/NutritionFactsTable";
 import { saveRecipe, isRecipeSaved, unsaveRecipe } from "../../lib/savedRecipes";
-import type { SyringeRecipe } from "../../lib/types";
+import type { SyringeRecipe, ShapeVariant } from "../../lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens — matches homepage / profile page aesthetic
@@ -124,8 +124,6 @@ function SyringeRecipeCardV2({ recipe }: { recipe: SyringeRecipe }) {
 // Resolution-independent — renders crisp at any size.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// imgSrc is a normalized data URL that works for both SVG (new backend) and PNG base64 (old backend)
-type ShapeVariant = { label: string; description: string; imgSrc: string | null; rawSvg: string | null };
 
 function toImgSrc(v: { svg?: string; b64?: string | null }): string | null {
   if (v.svg) return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(v.svg)}`;
@@ -160,9 +158,12 @@ function ContourPreviewV2({
   onSelect?: () => void;
   onSelectSvg?: (svg: string) => void;
 }) {
+  const { silhouetteVariants, silhouetteVariantsShape, setSilhouetteVariants } = useWizardStore();
   const [selected, setSelected] = useState(0);
-  const [variants, setVariants] = useState<ShapeVariant[]>(EMPTY_VARIANTS);
-  const [fetching, setFetching] = useState(!!shapeName);
+
+  const cached = silhouetteVariantsShape === shapeName && silhouetteVariants;
+  const variants: ShapeVariant[] = cached || EMPTY_VARIANTS;
+  const [fetching, setFetching] = useState(!cached && !!shapeName);
 
   const displayName = shapeName
     ? shapeName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -170,42 +171,32 @@ function ContourPreviewV2({
 
   useEffect(() => {
     if (!shapeName) { setFetching(false); return; }
+    // Skip fetch if we already have variants for this shape
+    if (silhouetteVariantsShape === shapeName && silhouetteVariants) {
+      const first = silhouetteVariants[0];
+      if (first?.rawSvg) onSelectSvg?.(first.rawSvg);
+      else if (first?.imgSrc) onSelectSvg?.(first.imgSrc);
+      setFetching(false);
+      return;
+    }
     setFetching(true);
     setSelected(0);
-    setVariants(EMPTY_VARIANTS);
-
-    let firstResolved = false;
-
-    // Fetch all 3 variants in parallel; render each as it arrives
-    const promises = EMPTY_VARIANTS.map((_, idx) =>
-      runSilhouette(shapeName, idx)
-        .then((v) => {
-          if (!v) return;
-          const updated: ShapeVariant = {
-            label: v.label,
-            description: v.description,
-            imgSrc: toImgSrc(v),
-            rawSvg: v.svg ?? null,
-          };
-          setVariants((prev) => {
-            const next = [...prev];
-            next[idx] = updated;
-            return next;
-          });
-          // Pass the first variant that resolves to engineer as the default shape
-          if (!firstResolved) {
-            firstResolved = true;
-            if (updated.rawSvg) onSelectSvg?.(updated.rawSvg);
-            else if (updated.imgSrc) onSelectSvg?.(updated.imgSrc);
-          }
-          // Hide shimmer once at least the first variant is loaded
-          setFetching(false);
-        })
-        .catch((err) => console.error(`[ContourPreview] variant ${idx} failed:`, err))
-    );
-
-    // Ensure fetching is cleared once all settle
-    Promise.allSettled(promises).then(() => setFetching(false));
+    runSilhouettes(shapeName)
+      .then(({ variants: fetched }) => {
+        const updated: ShapeVariant[] = fetched.map((v) => ({
+          label: v.label,
+          description: v.description,
+          imgSrc: toImgSrc(v),
+          rawSvg: v.svg ?? null,
+        }));
+        setSilhouetteVariants(shapeName, updated);
+        // Pass raw SVG or imgSrc for engineer handoff
+        const first = updated[0];
+        if (first?.rawSvg) onSelectSvg?.(first.rawSvg);
+        else if (first?.imgSrc) onSelectSvg?.(first.imgSrc);
+      })
+      .catch((err) => console.error("[ContourPreview] fetch failed:", err))
+      .finally(() => setFetching(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shapeName]);
 
@@ -381,7 +372,6 @@ export function Step5ChefV2() {
 
   const profile = getSelectedProfile();
   const [feedbackKind, setFeedbackKind] = useState<ReviseKind>("recipe");
-  const [feedbackTab, setFeedbackTab] = useState<"prompt" | "manual">("prompt");
   const [feedbackText, setFeedbackText] = useState("");
   const [hasInteracted, setHasInteracted] = useState(false);
   const [selectedSvg, setSelectedSvg] = useState<string | null>(null);
@@ -471,11 +461,27 @@ export function Step5ChefV2() {
     const t0 = Date.now();
     try {
       const parsed = await runParse(revisedPrompt);
-      setParsedPrompt(parsed);
+      
+      // If refining shape, update shape in parsedPrompt; if recipe, keep existing shape
+      if (showRevise === "shape") {
+        setParsedPrompt(parsed);
+        // Clear selected SVG to let new silhouettes load
+        setSelectedSvg(null);
+        setFeedbackText("");
+        setHasInteracted(true);
+        setStepLoading("chef", false);
+        return;
+      }
+
+      // For recipe refinement, keep the existing shape to prevent silhouette regeneration
+      const updatedParsed = { ...parsed, shape: parsedPrompt?.shape ?? parsed.shape };
+      setParsedPrompt(updatedParsed);
+
+      // Regenerate recipe
       const result = await runChef(
         dietitianOutput.nutrition_targets, dietitianOutput.allergens,
         profile?.age ?? 0, profile?.sex ?? "", profile?.dietaryPreferences ?? [],
-        parsed.shape, parsed.meal_type, parsed.ingredients, parsed.menu
+        updatedParsed.shape, updatedParsed.meal_type, updatedParsed.ingredients, updatedParsed.menu
       );
       appendLog({ stage: "chef",
         request: { prompt: revisedPrompt, nutrition_targets: dietitianOutput.nutrition_targets },
@@ -491,34 +497,6 @@ export function Step5ChefV2() {
     }
   }
 
-  // Manual slider overrides: build a descriptive prompt and route through AI
-  async function handleReviseManual(overrides: Record<string, number>) {
-    if (showRevise === "recipe") {
-      const parts: string[] = [];
-      if (overrides.calories !== undefined) parts.push(`${overrides.calories} kcal`);
-      if (overrides.protein !== undefined) parts.push(`${overrides.protein}g protein`);
-      if (overrides.sugar !== undefined) parts.push(`max ${overrides.sugar}g sugar`);
-      await handleRevisePrompt(`Adjust the recipe to target: ${parts.join(", ")}.`);
-    } else if (showRevise === "shape") {
-      const scale = overrides.scale ?? 1;
-      const desc = scale < 1 ? "smaller" : scale > 1 ? "larger" : "the same size";
-      await handleRevisePrompt(`Adjust the printed shape to be ${desc} (scale ${scale}x).`);
-    }
-  }
-
-  // Derive slider fields from current chef output
-  const recipeSliders = chefOutput?.nutrition_facts ? [
-    { key: "calories", label: "Calories", min: 50, max: 500, step: 5,
-      value: Math.round(chefOutput.nutrition_facts.calories ?? 150), unit: "kcal" },
-    { key: "protein", label: "Protein", min: 0, max: 40, step: 0.5,
-      value: parseFloat((chefOutput.nutrition_facts.protein_g ?? 5).toFixed(1)), unit: "g" },
-    { key: "sugar", label: "Sugar", min: 0, max: 30, step: 0.5,
-      value: parseFloat((chefOutput.nutrition_facts.total_sugars_g ?? 3).toFixed(1)), unit: "g" },
-  ] : [];
-
-  const shapeSliders = [
-    { key: "scale", label: "Scale", min: 0.5, max: 2.0, step: 0.1, value: 1.0, unit: "×" },
-  ];
 
   if (!chefOutput && stepLoading.chef) {
     return (
@@ -650,7 +628,7 @@ export function Step5ChefV2() {
                   return (
                     <button
                       key={kind}
-                      onClick={() => { setFeedbackKind(kind); setStepError("chef", null); setFeedbackText(""); setFeedbackTab("prompt"); }}
+                      onClick={() => { setFeedbackKind(kind); setStepError("chef", null); setFeedbackText(""); }}
                       style={{
                         padding: "7px 18px",
                         borderRadius: 999,
@@ -671,168 +649,72 @@ export function Step5ChefV2() {
               </div>
             </div>
 
-            {/* Tabbed card */}
+            {/* Card */}
             <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 16, overflow: "hidden" }}>
-
-              {/* Prompt | Manual tabs */}
-              <div style={{ display: "flex", borderBottom: `1px solid ${T.border}`, padding: "0 20px" }}>
-                {(["prompt", "manual"] as const).map((tab) => {
-                  const isActive = feedbackTab === tab;
-                  const hasSliders = feedbackKind === "recipe" ? recipeSliders.length > 0 : shapeSliders.length > 0;
-                  if (tab === "manual" && !hasSliders) return null;
-                  return (
-                    <button
-                      key={tab}
-                      onClick={() => setFeedbackTab(tab)}
-                      style={{
-                        padding: "14px 4px",
-                        marginRight: 20,
-                        fontSize: 14,
-                        fontWeight: isActive ? 600 : 400,
-                        fontFamily: "'Geist', sans-serif",
-                        cursor: "pointer",
-                        border: "none",
-                        background: "transparent",
-                        color: isActive ? T.ink : T.muted,
-                        borderBottom: isActive ? `2px solid ${T.ink}` : "2px solid transparent",
-                        marginBottom: -1,
-                        transition: "color 0.15s",
-                      }}
-                    >
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Panel body */}
               <div style={{ padding: "20px 24px 24px" }}>
-                {feedbackTab === "prompt" ? (
-                  <>
-                    <p style={{ margin: "0 0 12px", fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
-                      Describe what you want to change:
-                    </p>
-                    <textarea
-                      value={feedbackText}
-                      onChange={(e) => setFeedbackText(e.target.value)}
-                      placeholder={feedbackKind === "recipe"
-                        ? `e.g. "Lower sugar to max 8g, keep protein ratio high"`
-                        : `e.g. "Make it rounder and simpler for 3D printing"`}
-                      rows={4}
-                      disabled={isLoading}
-                      style={{
-                        width: "100%", padding: "12px 14px", fontSize: 13, lineHeight: 1.6,
-                        border: `1px solid ${T.border}`, borderRadius: 10,
-                        background: T.cream, color: T.ink,
-                        resize: "vertical", fontFamily: "'Geist', sans-serif",
-                        boxSizing: "border-box", outline: "none",
-                        transition: "border-color 0.15s",
-                      }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(21,60,54,0.4)")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
-                    />
-                    {stepError.chef && (
-                      <p style={{ margin: "8px 0 0", fontSize: 12, color: T.danger, fontFamily: "'Geist', sans-serif" }}>
-                        {stepError.chef}
-                      </p>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
-                      <button
-                        onClick={() => { setFeedbackText(""); setStepError("chef", null); }}
-                        disabled={isLoading}
-                        style={{
-                          padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-                          fontFamily: "'Geist', sans-serif", cursor: "pointer",
-                          border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted,
-                          transition: "border-color 0.15s, color 0.15s",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (feedbackText.trim()) handleRevisePrompt(feedbackText.trim());
-                        }}
-                        disabled={!feedbackText.trim() || isLoading}
-                        style={{
-                          padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                          fontFamily: "'Geist', sans-serif",
-                          cursor: !feedbackText.trim() || isLoading ? "not-allowed" : "pointer",
-                          border: "none",
-                          background: !feedbackText.trim() || isLoading ? "rgba(21,60,54,0.25)" : T.forest,
-                          color: T.forestInk,
-                          transition: "background 0.15s",
-                          display: "flex", alignItems: "center", gap: 6,
-                        }}
-                      >
-                        {stepLoading.chef && (
-                          <svg width="13" height="13" viewBox="0 0 20 20" style={{ animation: "spin 0.8s linear infinite" }}>
-                            <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
-                            <path d="M10 2 A8 8 0 0 1 18 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
-                        )}
-                        {stepLoading.chef ? "Revising…" : "Revise"}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ margin: "0 0 20px", fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
-                      Adjust values directly:
-                    </p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                      {(feedbackKind === "recipe" ? recipeSliders : shapeSliders).map((field) => (
-                        <div key={field.key}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                            <span style={{ color: T.ink, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>{field.label}</span>
-                            <span style={{ fontWeight: 600, color: T.forest, fontFamily: "'Geist Mono', monospace" }}>
-                              {field.value}<span style={{ color: T.muted, fontWeight: 400 }}> {field.unit}</span>
-                            </span>
-                          </div>
-                          <input
-                            type="range" min={field.min} max={field.max} step={field.step}
-                            defaultValue={field.value}
-                            style={{ width: "100%", accentColor: T.forest, height: 4 } as React.CSSProperties}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 20 }}>
-                      <button
-                        onClick={() => setFeedbackTab("prompt")}
-                        style={{
-                          padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-                          fontFamily: "'Geist', sans-serif", cursor: "pointer",
-                          border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted,
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleReviseManual(
-                          Object.fromEntries((feedbackKind === "recipe" ? recipeSliders : shapeSliders).map((f) => [f.key, f.value]))
-                        )}
-                        disabled={isLoading}
-                        style={{
-                          padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                          fontFamily: "'Geist', sans-serif", cursor: isLoading ? "not-allowed" : "pointer",
-                          border: "none",
-                          background: isLoading ? "rgba(21,60,54,0.25)" : T.forest,
-                          color: T.forestInk,
-                          display: "flex", alignItems: "center", gap: 6,
-                        }}
-                      >
-                        {stepLoading.chef && (
-                          <svg width="13" height="13" viewBox="0 0 20 20" style={{ animation: "spin 0.8s linear infinite" }}>
-                            <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
-                            <path d="M10 2 A8 8 0 0 1 18 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
-                        )}
-                        {stepLoading.chef ? "Applying…" : "Apply"}
-                      </button>
-                    </div>
-                  </>
+                <p style={{ margin: "0 0 12px", fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
+                  Describe what you want to change:
+                </p>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder={feedbackKind === "recipe"
+                    ? `e.g. "Lower sugar to max 8g, keep protein ratio high"`
+                    : `e.g. "Make it rounder and simpler for 3D printing"`}
+                  rows={4}
+                  disabled={isLoading}
+                  style={{
+                    width: "100%", padding: "12px 14px", fontSize: 13, lineHeight: 1.6,
+                    border: `1px solid ${T.border}`, borderRadius: 10,
+                    background: T.cream, color: T.ink,
+                    resize: "vertical", fontFamily: "'Geist', sans-serif",
+                    boxSizing: "border-box", outline: "none",
+                    transition: "border-color 0.15s",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(21,60,54,0.4)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
+                />
+                {stepError.chef && (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: T.danger, fontFamily: "'Geist', sans-serif" }}>
+                    {stepError.chef}
+                  </p>
                 )}
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
+                  <button
+                    onClick={() => { setFeedbackText(""); setStepError("chef", null); }}
+                    disabled={isLoading}
+                    style={{
+                      padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+                      fontFamily: "'Geist', sans-serif", cursor: "pointer",
+                      border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted,
+                      transition: "border-color 0.15s, color 0.15s",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { if (feedbackText.trim()) handleRevisePrompt(feedbackText.trim()); }}
+                    disabled={!feedbackText.trim() || isLoading}
+                    style={{
+                      padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      fontFamily: "'Geist', sans-serif",
+                      cursor: !feedbackText.trim() || isLoading ? "not-allowed" : "pointer",
+                      border: "none",
+                      background: !feedbackText.trim() || isLoading ? "rgba(21,60,54,0.25)" : T.forest,
+                      color: T.forestInk,
+                      transition: "background 0.15s",
+                      display: "flex", alignItems: "center", gap: 6,
+                    }}
+                  >
+                    {stepLoading.chef && (
+                      <svg width="13" height="13" viewBox="0 0 20 20" style={{ animation: "spin 0.8s linear infinite" }}>
+                        <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+                        <path d="M10 2 A8 8 0 0 1 18 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    )}
+                    {stepLoading.chef ? "Refining…" : "Refine"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -881,7 +763,7 @@ export function Step5ChefV2() {
 
         {/* Bottom bar */}
         <div className="no-print" style={{
-          flexShrink: 0, background: T.card,
+          flexShrink: 0, background: T.cream,
           borderTop: `1.5px solid ${T.border}`,
           padding: "14px 28px",
           display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10,

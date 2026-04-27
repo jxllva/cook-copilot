@@ -21,11 +21,10 @@ Supported file types:
 from __future__ import annotations
 
 import hashlib
-import os
 import re
-import shutil                          # ← FIX 1: added for rmtree
+import shutil
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -223,6 +222,10 @@ class KnowledgeBaseStore:
 
         # Chunk
         docs = _heading_aware_split(text)
+        docs = [doc for doc in docs if doc.page_content.strip()]
+
+        if not docs:
+            raise ValueError("No non-empty chunks produced from KB file")
 
         # Add source metadata
         for doc in docs:

@@ -288,6 +288,15 @@ export type RAGSource = {
   chunk_count: number;
 };
 
+// ── Silhouette shape variant ──────────────────────────────────────────────────
+
+export type ShapeVariant = {
+  label: string;
+  description: string;
+  imgSrc: string | null;
+  rawSvg: string | null;
+};
+
 // ── Wizard step ───────────────────────────────────────────────────────────────
 
 export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;

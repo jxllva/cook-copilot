@@ -27,7 +27,9 @@ interface ProfileMeta {
   weight: string;
   activity: string;
   allergies: string[];
+  allergyOther: string;
   medicalConditions: string[];
+  notes: string;
 }
 
 interface FormErrors {
@@ -98,8 +100,8 @@ const DEFAULT_PROFILES: Profile[] = [
     meta: {
       name: "Alex", diet: "Vegetarian", sex: "Prefer not to say",
       age: "28", height: "168", weight: "62",
-      activity: "Moderate", allergies: ["Dairy"],
-      medicalConditions: ["None"],
+      activity: "Moderate", allergies: ["Dairy"], allergyOther: "",
+      medicalConditions: ["None"], notes: "",
     },
   },
   {
@@ -107,8 +109,8 @@ const DEFAULT_PROFILES: Profile[] = [
     meta: {
       name: "Jordan", diet: "Omnivore", sex: "Prefer not to say",
       age: "34", height: "180", weight: "78",
-      activity: "Active", allergies: ["Wheat/Gluten"],
-      medicalConditions: ["Celiac Disease"],
+      activity: "Active", allergies: ["Wheat/Gluten"], allergyOther: "",
+      medicalConditions: ["Celiac Disease"], notes: "",
     },
   },
 ];
@@ -122,7 +124,9 @@ const EMPTY_FORM: ProfileMeta = {
   weight: "",
   activity: "Moderate",
   allergies: [],
+  allergyOther: "",
   medicalConditions: ["None"],
+  notes: "",
 };
 
 // ─── SVG Glyphs ───────────────────────────────────────────────────────────────
@@ -339,7 +343,6 @@ function ProfileCard({
     </div>
   );
 }
-
 
 // ─── Profile Modal ────────────────────────────────────────────────────────────
 
@@ -596,6 +599,20 @@ function ProfileModal({
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {ALLERGIES.map((a) => <Chip key={a} active={data.allergies.includes(a)} onClick={() => toggleAllergy(a)}>{a}</Chip>)}
               </div>
+              <textarea
+                style={{
+                  padding: "10px",
+                  borderRadius: 10,
+                  border: "1.5px solid #1A141030",
+                  marginTop: 10,
+                  width: "100%",
+                  height: 70,
+                  fontFamily: "'Geist', sans-serif",
+                }}
+                placeholder="Other allergies..."
+                value={data.allergyOther || ""}
+                onChange={(e) => upd({ allergyOther: e.target.value })}
+              />
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -603,6 +620,20 @@ function ProfileModal({
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {MEDICAL_CONDITIONS.map((c) => <Chip key={c} active={data.medicalConditions.includes(c)} onClick={() => toggleCondition(c)}>{c}</Chip>)}
               </div>
+              <textarea
+                style={{
+                  padding: "10px",
+                  borderRadius: 10,
+                  border: "1.5px solid #1A141030",
+                  marginTop: 10,
+                  width: "100%",
+                  height: 70,
+                  fontFamily: "'Geist', sans-serif",
+                }}
+                placeholder="Other medical conditions..."
+                value={data.notes || ""}
+                onChange={(e) => upd({ notes: e.target.value })}
+              />
               <ErrorMsg msg={errors.medicalConditions} />
             </div>
           </div>
@@ -873,10 +904,10 @@ export default function HomePage() {
                   activityLevel: (ACTIVITY_MAP[meta?.activity ?? ""] ?? "moderate") as ActivityLevel,
                   weightGoal: "maintain" as const,
                   allergies: (meta?.allergies ?? []).map((a) => ALLERGY_MAP[a]).filter(Boolean) as Allergen[],
-                  allergyOther: "",
+                  allergyOther: meta?.allergyOther ?? "",
                   medicalConditions: (meta?.medicalConditions ?? ["None"]).map((c) => CONDITION_MAP[c]).filter(Boolean) as MedicalCondition[],
                   dietaryPreferences: [DIET_MAP[meta?.diet ?? ""]].filter(Boolean) as DietaryPreference[],
-                  notes: "",
+                  notes: meta?.notes ?? "",
                 };
                 const existing = wizardProfiles.find((p) => p.profileName === selectedProfile.name);
                 let wid: string;

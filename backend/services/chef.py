@@ -47,7 +47,7 @@ def run(
     dietary_preferences: List[str] = [],
     medical_conditions: List[str] = [],
     use_rag: bool = False,
-    model: str = "gpt-4o-mini",
+    model: str = "gemini-3.1-flash-lite-preview",
     shape: str = "",
     meal_type: str = "",
     requested_ingredients: List[str] = [],

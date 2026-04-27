@@ -47,10 +47,6 @@ class Settings(BaseSettings):
     default_llm_provider: str = "openai"
     default_llm_model: str = "gpt-4o-mini"
 
-    # PostHog analytics
-    posthog_api_key: str = ""
-    posthog_host: str = "https://us.i.posthog.com"
-
     class Config:
         env_file = ".env"
         extra = "ignore"

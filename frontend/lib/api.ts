@@ -121,6 +121,17 @@ export async function runDietitian(
   });
 }
 
+/** Refine existing nutrition targets via free-text user request */
+export async function refineDietitian(
+  currentTargets: DietitianResponse,
+  refinement: string
+): Promise<DietitianResponse> {
+  return post<DietitianResponse>("/api/dietitian/refine", {
+    current_targets: currentTargets,
+    refinement,
+  });
+}
+
 /** Run the Chef AI stage: designs syringe recipes meeting nutrition targets */
 export async function runChef(
   nutritionTargets: NutritionTargets,
@@ -149,13 +160,6 @@ export async function runChef(
 /** Generate 3 distinct silhouette variants for a shape name (svg or b64 depending on backend) */
 export async function runSilhouettes(shape: string): Promise<{ variants: { label: string; description: string; svg?: string; b64?: string | null }[] }> {
   return post("/api/silhouettes", { shape });
-}
-
-/** Generate a single silhouette variant by index (0=Classic, 1=Alternate, 2=Stylized).
- *  Returns as soon as that one image is ready — use 3 parallel calls for progressive rendering. */
-export async function runSilhouette(shape: string, variantIndex: number): Promise<{ label: string; description: string; svg?: string; b64?: string | null } | null> {
-  const res: { variants: { label: string; description: string; svg?: string; b64?: string | null }[] } = await post("/api/silhouettes", { shape, variant_index: variantIndex });
-  return res.variants[0] ?? null;
 }
 
 /** Run the Engineer AI stage: generates GCode from recipes */

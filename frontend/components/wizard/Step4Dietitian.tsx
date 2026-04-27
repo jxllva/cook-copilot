@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { useWizardStore } from "../../store/wizardStore";
 import { Button } from "../ui/Button";
 import { StageLoader } from "../ui/StageLoader";
-import { RevisePanel } from "../ui/RevisePanel";
-import { runDietitian, runChef } from "../../lib/api";
+import { runChef, refineDietitian } from "../../lib/api";
 import { ProfileSidebar } from "../dietitian/ProfileSidebar";
 
 const T = {
@@ -151,31 +150,17 @@ export function Step4Dietitian() {
     goToStep,
   } = useWizardStore();
 
-  const [showRevise, setShowRevise] = useState(false);
   const [showEditRestrictions, setShowEditRestrictions] = useState(false);
+  const [refineText, setRefineText] = useState("");
   const profile = getSelectedProfile();
 
   const isLoading = stepLoading.dietitian || stepLoading.chef;
   const error = stepError.dietitian || stepError.chef;
 
-  // ── Daily target slider state
-  const originalDailyTarget = dietitianOutput?.daily_reference?.daily_target ?? 2000;
-  const [dailyTarget, setDailyTarget] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (dietitianOutput?.daily_reference?.daily_target) {
-      setDailyTarget(Math.round(dietitianOutput.daily_reference.daily_target));
-    }
-  }, [dietitianOutput?.daily_reference?.daily_target]);
-
-  const effectiveDailyTarget = dailyTarget ?? Math.round(originalDailyTarget);
-  const ratio = originalDailyTarget > 0 ? effectiveDailyTarget / originalDailyTarget : 1;
-  const displayKcalMin = Math.round((dietitianOutput?.nutrition_targets.kcal.min ?? 0) * ratio);
-  const displayKcalMax = Math.round((dietitianOutput?.nutrition_targets.kcal.max ?? 0) * ratio);
-
-  const isTooLow = effectiveDailyTarget < 1200;
-  const isTooHigh = effectiveDailyTarget > 3500;
-  const hasWarning = isTooLow || isTooHigh;
+  // ── Fixed daily target (no slider)
+  const effectiveDailyTarget = dietitianOutput?.daily_reference?.daily_target ?? 2000;
+  const displayKcalMin = dietitianOutput?.nutrition_targets.kcal.min ?? 0;
+  const displayKcalMax = dietitianOutput?.nutrition_targets.kcal.max ?? 0;
 
   // ── Confirm
   async function handleConfirm() {
@@ -183,19 +168,14 @@ export function Step4Dietitian() {
     setStepLoading("chef", true);
     setStepError("chef", null);
     const t0 = Date.now();
-    const adjustedOutput = {
-      ...dietitianOutput,
-      nutrition_targets: { ...dietitianOutput.nutrition_targets, kcal: { min: displayKcalMin, max: displayKcalMax } },
-      daily_reference: { ...dietitianOutput.daily_reference, daily_target: effectiveDailyTarget },
-    };
     try {
       const result = await runChef(
-        adjustedOutput.nutrition_targets, adjustedOutput.allergens,
+        dietitianOutput.nutrition_targets, dietitianOutput.allergens,
         profile?.age ?? 0, profile?.sex ?? "", profile?.dietaryPreferences ?? [],
-        parsedPrompt?.shape ?? "", parsedPrompt?.meal_type ?? adjustedOutput.meal_type,
+        parsedPrompt?.shape ?? "", parsedPrompt?.meal_type ?? dietitianOutput.meal_type,
         parsedPrompt?.ingredients ?? [], parsedPrompt?.menu ?? ""
       );
-      appendLog({ stage: "chef", request: { prompt, nutrition_targets: adjustedOutput.nutrition_targets }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
+      appendLog({ stage: "chef", request: { prompt, nutrition_targets: dietitianOutput.nutrition_targets }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
       setChefOutput(result);
       goToStep(5);
     } catch (err) {
@@ -205,36 +185,22 @@ export function Step4Dietitian() {
     }
   }
 
-  // ── Revise
-  async function handleRevisePrompt(revision: string) {
-    if (!profile) return;
+  // ── Refine nutrition targets via free-text
+  async function handleRefine() {
+    if (!dietitianOutput || !refineText.trim()) return;
     setStepLoading("dietitian", true);
     setStepError("dietitian", null);
     const t0 = Date.now();
     try {
-      const result = await runDietitian(profile, parsedPrompt?.meal_type ?? "");
-      appendLog({ stage: "dietitian", request: { revision, profile }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
+      const result = await refineDietitian(dietitianOutput, refineText.trim());
+      appendLog({ stage: "dietitian", request: { refinement: refineText, current: dietitianOutput }, response: result as unknown as Record<string, unknown>, timestamp: t0, duration_ms: Date.now() - t0 });
       setDietitianOutput(result);
-      setShowRevise(false);
+      setRefineText("");
     } catch (err) {
-      setStepError("dietitian", err instanceof Error ? err.message : "Revision failed.");
+      setStepError("dietitian", err instanceof Error ? err.message : "Refinement failed.");
     } finally {
       setStepLoading("dietitian", false);
     }
-  }
-
-  function handleReviseManual(overrides: Record<string, number>) {
-    if (!dietitianOutput) return;
-    const nt = dietitianOutput.nutrition_targets;
-    setDietitianOutput({
-      ...dietitianOutput,
-      nutrition_targets: {
-        ...nt,
-        kcal: { ...nt.kcal, min: overrides.kcal_min ?? nt.kcal.min, max: overrides.kcal_max ?? nt.kcal.max },
-        sugar_g: { ...nt.sugar_g, max: overrides.sugar_max ?? nt.sugar_g.max },
-      },
-    });
-    setShowRevise(false);
   }
 
   function handleSaveRestrictions(updated: string[]) {
@@ -257,28 +223,14 @@ export function Step4Dietitian() {
   const mealType = dietitianOutput.meal_type;
   const allergens = dietitianOutput.allergens;
 
-  const sliderMin = Math.max(800, Math.round(originalDailyTarget * 0.4));
-  const sliderMax = Math.round(originalDailyTarget * 1.8);
-  const sliderPct = Math.max(0, Math.min(100, ((effectiveDailyTarget - sliderMin) / (sliderMax - sliderMin)) * 100));
-  const sliderColor = isTooLow ? "#EF4444" : isTooHigh ? "#F59E0B" : T.forest;
-
   const carbDeg = (macro_percent.carbs / 100) * 360;
   const proteinDeg = (macro_percent.protein / 100) * 360;
   const donutGradient = `conic-gradient(${T.teal} 0deg ${carbDeg}deg, ${T.orange} ${carbDeg}deg ${carbDeg + proteinDeg}deg, ${T.amber} ${carbDeg + proteinDeg}deg 360deg)`;
 
-  const dietitianSliders = [
-    { key: "kcal_min", label: "Kcal min", min: 100, max: 800, step: 10, value: nt.kcal.min, unit: "kcal" },
-    { key: "kcal_max", label: "Kcal max", min: 100, max: 800, step: 10, value: nt.kcal.max, unit: "kcal" },
-    { key: "sugar_max", label: "Sugar max", min: 0, max: 50, step: 1, value: nt.sugar_g.max, unit: "g" },
-  ];
-
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: T.cream }}>
       <style>{`
-        input[type=range].nt-slider { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; outline: none; cursor: pointer; width: 100%; display: block; }
-        input[type=range].nt-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid ${T.forest}; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-top: -8px; }
-        input[type=range].nt-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; }
-        input[type=range].nt-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid ${T.forest}; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "36px 32px", maxWidth: 960, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
@@ -302,7 +254,7 @@ export function Step4Dietitian() {
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "24px 28px" }}>
               {/* Header row */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
-                <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>Calories</span>
+                <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>Meal Calorie Goal</span>
                 <span style={{
                   padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
                   textTransform: "uppercase" as const, letterSpacing: "0.06em", fontFamily: "'Geist', sans-serif",
@@ -354,51 +306,22 @@ export function Step4Dietitian() {
               )}
             </div>
 
-            {/* ── Card 2: Daily target slider + Restrictions ── */}
+            {/* ── Card 2: Daily target (fixed) + Restrictions ── */}
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "24px 28px" }}>
               {/* Daily target section */}
               <div style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500, marginBottom: 18 }}>
                 Daily Nutrition Targets
               </div>
 
-              <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 44, fontWeight: 700, color: T.ink, fontFamily: "'Geist', sans-serif", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                  {effectiveDailyTarget.toLocaleString()}
+                  {Math.round(effectiveDailyTarget).toLocaleString()}
                 </div>
                 <div style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", marginTop: 5 }}>kcal/day</div>
               </div>
 
-              <input
-                type="range"
-                className="nt-slider"
-                min={sliderMin}
-                max={sliderMax}
-                step={10}
-                value={effectiveDailyTarget}
-                onChange={(e) => setDailyTarget(Number(e.target.value))}
-                style={{
-                  background: `linear-gradient(to right, ${sliderColor} 0%, ${sliderColor} ${sliderPct}%, #E5E7EB ${sliderPct}%, #E5E7EB 100%)`,
-                }}
-              />
-
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist', sans-serif" }}>{sliderMin.toLocaleString()} kcal</span>
-                <span style={{ fontSize: 11, color: T.muted, fontFamily: "'Geist', sans-serif" }}>{sliderMax.toLocaleString()} kcal</span>
-              </div>
-
-              {hasWarning && (
-                <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: isTooLow ? T.errorBg : T.warnBg, border: `1px solid ${isTooLow ? T.errorBorder : T.warnBorder}`, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 15, lineHeight: "1.3" }}>{isTooLow ? "⚠️" : "💡"}</span>
-                  <span style={{ fontSize: 13, color: isTooLow ? T.errorText : "#92400E", fontFamily: "'Geist', sans-serif", lineHeight: 1.5 }}>
-                    {isTooLow
-                      ? "Below the typical safe minimum (1,200 kcal/day). Very low targets should be supervised by a healthcare professional."
-                      : "This exceeds a typical daily energy need. Make sure this target fits your goals."}
-                  </span>
-                </div>
-              )}
-
               {/* Restrictions divider */}
-              <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
+              <div style={{ paddingTop: 20, borderTop: `1px solid ${T.border}` }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>
                     Restrictions
@@ -426,19 +349,82 @@ export function Step4Dietitian() {
               </div>
             </div>
 
-            {/* Revise panel */}
-            {showRevise && (
-              <RevisePanel
-                onRevisePrompt={handleRevisePrompt}
-                onReviseManual={handleReviseManual}
-                sliderFields={dietitianSliders}
-                loading={stepLoading.dietitian}
-                error={stepError.dietitian}
-                onCancel={() => setShowRevise(false)}
-              />
-            )}
+            {/* ── Refine section ── */}
+            <div>
+              <h3 style={{
+                margin: "0 0 16px", fontSize: 22,
+                fontFamily: "'Instrument Serif', serif",
+                fontWeight: 400, color: T.ink, letterSpacing: "-0.01em",
+              }}>
+                Refine
+              </h3>
+              <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 16, overflow: "hidden" }}>
+                <div style={{ padding: "20px 24px 24px" }}>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif" }}>
+                    Describe how you want to adjust your nutrition targets:
+                  </p>
+                  <textarea
+                    value={refineText}
+                    onChange={(e) => setRefineText(e.target.value)}
+                    placeholder={`e.g. "Lower sugar to max 5g" or "Increase protein ratio"`}
+                    rows={4}
+                    disabled={isLoading}
+                    style={{
+                      width: "100%", padding: "12px 14px", fontSize: 13, lineHeight: 1.6,
+                      border: `1px solid ${T.border}`, borderRadius: 10,
+                      background: T.cream, color: T.ink,
+                      resize: "vertical", fontFamily: "'Geist', sans-serif",
+                      boxSizing: "border-box", outline: "none",
+                      transition: "border-color 0.15s",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(21,60,54,0.4)")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
+                  />
+                  {stepError.dietitian && (
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: T.errorText, fontFamily: "'Geist', sans-serif" }}>
+                      {stepError.dietitian}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 14 }}>
+                    <button
+                      onClick={() => { setRefineText(""); setStepError("dietitian", null); }}
+                      disabled={isLoading}
+                      style={{
+                        padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500,
+                        fontFamily: "'Geist', sans-serif", cursor: "pointer",
+                        border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { if (refineText.trim()) handleRefine(); }}
+                      disabled={!refineText.trim() || isLoading}
+                      style={{
+                        padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                        fontFamily: "'Geist', sans-serif",
+                        cursor: !refineText.trim() || isLoading ? "not-allowed" : "pointer",
+                        border: "none",
+                        background: !refineText.trim() || isLoading ? "rgba(21,60,54,0.25)" : T.forest,
+                        color: T.forestInk,
+                        display: "flex", alignItems: "center", gap: 6,
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      {stepLoading.dietitian && (
+                        <svg width="13" height="13" viewBox="0 0 20 20" style={{ animation: "spin 0.8s linear infinite" }}>
+                          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+                          <path d="M10 2 A8 8 0 0 1 18 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {stepLoading.dietitian ? "Refining…" : "Refine"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            {error && (
+            {error && !stepError.dietitian && (
               <div style={{ padding: "12px 16px", borderRadius: 8, background: T.errorBg, border: `1px solid ${T.errorBorder}`, color: T.errorText, fontSize: 13, fontFamily: "'Geist', sans-serif" }}>
                 {error}
               </div>
@@ -448,23 +434,21 @@ export function Step4Dietitian() {
       </div>
 
       {/* ── Bottom bar ── */}
-      {!showRevise && (
-        <div style={{ position: "sticky", bottom: 0, background: T.cream, borderTop: `1px solid ${T.border}`, padding: "14px 32px", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1 }} />
-          <Button variant="secondary" size="md" onClick={() => goToStep(3)} disabled={isLoading}>
-            ← Previous
-          </Button>
-          <Button
-            variant="primary" size="md"
-            loading={stepLoading.chef}
-            loadingMessages={["Designing your recipe…", "Balancing the ingredients…", "Crafting the perfect blend…", "Assigning syringe layers…", "Almost there…"]}
-            disabled={isLoading}
-            onClick={handleConfirm}
-          >
-            Confirm — generate recipe →
-          </Button>
-        </div>
-      )}
+      <div style={{ position: "sticky", bottom: 0, background: T.cream, borderTop: `1px solid ${T.border}`, padding: "14px 32px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }} />
+        <Button variant="secondary" size="md" onClick={() => goToStep(3)} disabled={isLoading}>
+          ← Previous
+        </Button>
+        <Button
+          variant="primary" size="md"
+          loading={stepLoading.chef}
+          loadingMessages={["Designing your recipe…", "Balancing the ingredients…", "Crafting the perfect blend…", "Assigning syringe layers…", "Almost there…"]}
+          disabled={isLoading}
+          onClick={handleConfirm}
+        >
+          Confirm — generate recipe →
+        </Button>
+      </div>
 
       {/* Modals */}
       {showEditRestrictions && (
