@@ -25,7 +25,7 @@ export function NutritionTargetCard({
     >
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--fg2)" }}>Nutrition Targets</div>
+        <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--fg)" }}>Nutrition Targets</div>
         <span
           style={{
             padding: "3px 10px",
@@ -46,12 +46,12 @@ export function NutritionTargetCard({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         {/* Left: Calories */}
         <div>
-          <div style={{ fontSize: "11px", color: "var(--fg3)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <div style={{ fontSize: "12px", color: "var(--fg2)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>
             Calories
           </div>
           <div style={{ fontSize: "28px", fontWeight: 700, color: "var(--fg)", letterSpacing: "-0.02em" }}>
             {nt.kcal.min}–{nt.kcal.max}
-            <span style={{ fontSize: "14px", fontWeight: 400, color: "var(--fg3)", marginLeft: "4px" }}>kcal</span>
+            <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--fg2)", marginLeft: "4px" }}>kcal</span>
           </div>
         </div>
 

@@ -4,10 +4,14 @@ PUT  /api/settings  — Update app settings
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
+from typing import Optional
+
+from posthog import new_context, identify_context, set_context_session
 
 from schemas.settings import AppSettings
 from db.repositories.settings import get_settings_record, save_settings_record
+from core.posthog_client import get_posthog
 
 router = APIRouter()
 
@@ -18,8 +22,27 @@ async def get_settings() -> AppSettings:
 
 
 @router.put("/api/settings", response_model=AppSettings)
-async def update_settings(data: AppSettings) -> AppSettings:
-    return save_settings_record(data)
+async def update_settings(
+    data: AppSettings,
+    x_posthog_distinct_id: Optional[str] = Header(None),
+    x_posthog_session_id: Optional[str] = Header(None),
+) -> AppSettings:
+    posthog = get_posthog()
+    with new_context():
+        if x_posthog_distinct_id:
+            identify_context(x_posthog_distinct_id)
+        if x_posthog_session_id:
+            set_context_session(x_posthog_session_id)
+        result = save_settings_record(data)
+        posthog.capture(
+            "settings updated",
+            properties={
+                "llm_model": data.llm_model,
+                "use_rag": data.use_rag,
+                "skip_dietitian": data.skip_dietitian,
+            },
+        )
+        return result
 
 
 @router.get("/api/chef/sections")

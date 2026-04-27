@@ -50,22 +50,22 @@ function NutrientRow({ label, value, dvPct, indent = false, bold = false }: RowP
         justifyContent: "space-between",
         alignItems: "baseline",
         borderTop: "1px solid var(--card-border)",
-        padding: "1px 0",
+        padding: "2px 0",
         paddingLeft: indent ? "16px" : "0",
       }}
     >
-      <span style={{ fontSize: "13px", fontWeight: bold ? 600 : 400, color: "var(--fg2)" }}>
+      <span style={{ fontSize: "13px", fontWeight: bold ? 700 : 400, color: bold ? "var(--fg)" : "var(--fg2)" }}>
         {label}
       </span>
-      <span style={{ fontSize: "13px", textAlign: "right", color: "var(--fg2)" }}>
+      <span style={{ fontSize: "13px", textAlign: "right", color: "var(--fg)" }}>
         {dvPct ? (
           <>
-            <span style={{ fontWeight: bold ? 600 : 400 }}>{value}</span>
+            <span style={{ fontWeight: bold ? 700 : 400 }}>{value}</span>
             {"  "}
             <span style={{ fontWeight: 700 }}>{dvPct}</span>
           </>
         ) : (
-          <span style={{ fontWeight: bold ? 600 : 400 }}>{value}</span>
+          <span style={{ fontWeight: bold ? 700 : 400 }}>{value}</span>
         )}
       </span>
     </div>

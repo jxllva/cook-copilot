@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     default_llm_provider: str = "gemini"
     default_llm_model: str = "gemini-3.1-flash-lite-preview"
 
+    # PostHog analytics
+    posthog_api_key: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
