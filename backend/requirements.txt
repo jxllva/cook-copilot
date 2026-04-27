@@ -37,5 +37,3 @@ scipy>=1.11.0
 # --- Image processing (silhouette / G-code path tracing) ---
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
-# --- Analytics ---
-posthog>=3.0.0

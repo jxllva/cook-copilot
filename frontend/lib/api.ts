@@ -151,13 +151,6 @@ export async function runSilhouettes(shape: string): Promise<{ variants: { label
   return post("/api/silhouettes", { shape });
 }
 
-/** Generate a single silhouette variant by index (0=Classic, 1=Alternate, 2=Stylized).
- *  Returns as soon as that one image is ready — use 3 parallel calls for progressive rendering. */
-export async function runSilhouette(shape: string, variantIndex: number): Promise<{ label: string; description: string; svg?: string; b64?: string | null } | null> {
-  const res: { variants: { label: string; description: string; svg?: string; b64?: string | null }[] } = await post("/api/silhouettes", { shape, variant_index: variantIndex });
-  return res.variants[0] ?? null;
-}
-
 /** Run the Engineer AI stage: generates GCode from recipes */
 export async function runEngineer(
   prompt: string,

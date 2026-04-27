@@ -45,7 +45,7 @@ export function MacroPieChart({
       </div>
 
       {/* Legend */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         {[
           { color: "#29787C", label: "Carbs", pct: Math.round(carbs) },
           { color: "#FFB341", label: "Protein", pct: Math.round(protein) },
@@ -54,15 +54,15 @@ export function MacroPieChart({
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <div
               style={{
-                width: "9px",
-                height: "9px",
+                width: "8px",
+                height: "8px",
                 borderRadius: "2px",
                 background: item.color,
                 flexShrink: 0,
               }}
             />
-            <span style={{ fontSize: "13px", color: "var(--fg2)", fontWeight: 500 }}>{item.label}</span>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--fg)", marginLeft: "auto" }}>
+            <span style={{ fontSize: "12px", color: "var(--fg2)" }}>{item.label}</span>
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--fg)", marginLeft: "auto" }}>
               {item.pct}%
             </span>
           </div>
