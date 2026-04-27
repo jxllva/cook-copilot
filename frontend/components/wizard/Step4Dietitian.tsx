@@ -254,7 +254,7 @@ export function Step4Dietitian() {
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "24px 28px" }}>
               {/* Header row */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
-                <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>Calories</span>
+                <span style={{ fontSize: 13, color: T.muted, fontFamily: "'Geist', sans-serif", fontWeight: 500 }}>Meal Calorie Goal</span>
                 <span style={{
                   padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
                   textTransform: "uppercase" as const, letterSpacing: "0.06em", fontFamily: "'Geist', sans-serif",

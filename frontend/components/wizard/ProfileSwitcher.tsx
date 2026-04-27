@@ -79,6 +79,8 @@ export function EditProfileModal({
   const [activity, setActivity] = useState<ActivityLevel>(profile.activityLevel);
   const [allergies, setAllergies] = useState<Allergen[]>(profile.allergies);
   const [conditions, setConditions] = useState<MedicalCondition[]>(profile.medicalConditions);
+  const [customAllergies, setCustomAllergies] = useState("");
+  const [customConditions, setCustomConditions] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -137,6 +139,9 @@ export function EditProfileModal({
           fontFamily: "'Geist', sans-serif",
         }}
       >
+        <h1 style={{ color: "red", fontSize: 32 }}>
+          TEST EDIT MODAL
+        </h1>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 24, fontFamily: "'Instrument Serif', serif", fontWeight: 400, color: "#1A1410" }}>Edit profile</h2>
           <button onClick={onClose} style={{ fontSize: 20, color: "#6B5D50", background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>✕</button>
@@ -177,27 +182,51 @@ export function EditProfileModal({
 
           <div>
             <label style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", letterSpacing: ".08em", textTransform: "uppercase", color: "#6B5D50", display: "block", marginBottom: 8 }}>Allergies</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {(Object.entries(ALLERGEN_LABELS) as [Allergen, string][]).map(([k, v]) => (
                 <Chip key={k} active={allergies.includes(k)} onClick={() => toggleAllergen(k)}>{v}</Chip>
               ))}
             </div>
+            <textarea
+              value={customAllergies}
+              onChange={(e) => setCustomAllergies(e.target.value)}
+              placeholder="Add other allergies here..."
+              style={{
+                ...inputStyle,
+                height: 80,
+                resize: "vertical",
+                fontFamily: "'Geist', sans-serif",
+                fontSize: 13,
+              }}
+            />
           </div>
 
           <div>
             <label style={{ fontSize: 11, fontFamily: "'Geist Mono', monospace", letterSpacing: ".08em", textTransform: "uppercase", color: "#6B5D50", display: "block", marginBottom: 8 }}>Medical conditions</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
               {(Object.entries(CONDITION_LABELS) as [MedicalCondition, string][]).map(([k, v]) => (
                 <Chip key={k} active={conditions.includes(k)} onClick={() => toggleCondition(k)}>{v}</Chip>
               ))}
             </div>
+            <textarea
+              value={customConditions}
+              onChange={(e) => setCustomConditions(e.target.value)}
+              placeholder="Add other medical conditions here..."
+              style={{
+                ...inputStyle,
+                height: 60,
+                resize: "vertical",
+                fontFamily: "'Geist', sans-serif",
+                fontSize: 13,
+              }}
+            />
           </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}>
           <button onClick={onClose} style={{ padding: "10px 16px", borderRadius: 10, background: "transparent", color: "#6B5D50", fontSize: 14, border: "none", cursor: "pointer", fontFamily: "'Geist', sans-serif" }}>Cancel</button>
           <button
-            onClick={() => onSave({ profileName: name.trim() || profile.profileName, sex, age: Number(age), heightCm: Number(height), weightKg: Number(weight), activityLevel: activity, allergies, medicalConditions: conditions })}
+            onClick={() => onSave({ profileName: name.trim() || profile.profileName, sex, age: Number(age), heightCm: Number(height), weightKg: Number(weight), activityLevel: activity, allergies, allergyOther: customAllergies, medicalConditions: conditions, notes: customConditions })}
             style={{ padding: "10px 20px", borderRadius: 10, background: "rgb(21,60,54)", color: "#FFF4E6", fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Geist', sans-serif" }}
           >
             Save changes
