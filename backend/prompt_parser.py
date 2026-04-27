@@ -11,12 +11,13 @@ from __future__ import annotations
 
 from typing import List, Literal
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 
 load_dotenv()
-_client = OpenAI()
+_client = genai.Client()
 
 
 class ParsedPrompt(BaseModel):
@@ -66,7 +67,7 @@ Rules:
 Keep shape values short (1-3 words, lowercase)."""
 
 
-def parse(prompt: str, model: str = "gpt-4o-mini") -> ParsedPrompt:
+def parse(prompt: str, model: str = "gemini-3.1-flash-lite-preview") -> ParsedPrompt:
     """
     Parse a user prompt and return structured fields.
 
@@ -74,15 +75,16 @@ def parse(prompt: str, model: str = "gpt-4o-mini") -> ParsedPrompt:
     Falls back to safe defaults on any error.
     """
     try:
-        response = _client.responses.parse(
+        response = _client.models.generate_content(
             model=model,
-            input=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            text_format=ParsedPrompt,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=ParsedPrompt,
+            ),
         )
-        result = response.output_parsed
+        result = response.parsed
         if result is None:
             raise ValueError("Empty response from parser LLM")
         return result

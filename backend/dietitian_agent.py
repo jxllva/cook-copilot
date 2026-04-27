@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from typing import Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 
 load_dotenv()
-client = OpenAI()
+client = genai.Client()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -125,7 +126,7 @@ Be conservative. When in doubt, use 1.0 stress factor and no overrides.
 """
 
 
-def get_illness_adjustment(illness_condition, kb_context="", model="gpt-4o-mini"):
+def get_illness_adjustment(illness_condition, kb_context="", model="gemini-3.1-flash-lite-preview"):
     if not illness_condition or illness_condition.lower() in ("none", "n/a", ""):
         return IllnessAdjustment(stress_factor=1.0)
 
@@ -134,15 +135,16 @@ def get_illness_adjustment(illness_condition, kb_context="", model="gpt-4o-mini"
         system += f"\n\n## Reference Context:\n{kb_context}\n"
 
     try:
-        response = client.responses.parse(
+        response = client.models.generate_content(
             model=model,
-            input=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": f"Condition: {illness_condition}"},
-            ],
-            text_format=IllnessAdjustment,
+            contents=f"Condition: {illness_condition}",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                response_schema=IllnessAdjustment,
+            ),
         )
-        adj = response.output_parsed
+        adj = response.parsed
         if adj is None:
             raise ValueError("Empty response from LLM")
         adj.stress_factor = max(0.7, min(2.0, adj.stress_factor))
@@ -185,7 +187,7 @@ def validate_and_clamp(result):
 # 4. Core Pipeline (unchanged)
 # ═══════════════════════════════════════════════════════════════════════
 
-def _run_hybrid_dietitian(requirement, kb_context="", model="gpt-4o-mini"):
+def _run_hybrid_dietitian(requirement, kb_context="", model="gemini-3.1-flash-lite-preview"):
     """The original deterministic pipeline — untouched."""
     profile = requirement.user_profile if hasattr(requirement, 'user_profile') else _dict_profile(requirement)
     steps, assumptions, missing_fields, sources = [], [], [], []

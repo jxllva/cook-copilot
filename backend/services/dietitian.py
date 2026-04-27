@@ -67,7 +67,7 @@ def _build_requirement(profile: UserProfileCreate, meal_type: str) -> Dict[str, 
     }
 
 
-def run(profile: UserProfileCreate, meal_type: str = "snack", use_rag: bool = True, model: str = "gpt-4o-mini") -> Dict[str, Any]:
+def run(profile: UserProfileCreate, meal_type: str = "snack", use_rag: bool = True, model: str = "gemini-3.1-flash-lite-preview") -> Dict[str, Any]:
     """
     Run the dietitian pipeline for the given profile + meal_type.
 
