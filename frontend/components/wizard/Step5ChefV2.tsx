@@ -7,7 +7,7 @@ import { StageLoader } from "../ui/StageLoader";
 import { runParse, runChef, runEngineer, runSilhouettes } from "../../lib/api";
 import { NutritionFactsTable } from "../chef/NutritionFactsTable";
 import { saveRecipe, isRecipeSaved, unsaveRecipe } from "../../lib/savedRecipes";
-import type { SyringeRecipe } from "../../lib/types";
+import type { SyringeRecipe, ShapeVariant } from "../../lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens — matches homepage / profile page aesthetic
@@ -124,8 +124,6 @@ function SyringeRecipeCardV2({ recipe }: { recipe: SyringeRecipe }) {
 // Resolution-independent — renders crisp at any size.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// imgSrc is a normalized data URL that works for both SVG (new backend) and PNG base64 (old backend)
-type ShapeVariant = { label: string; description: string; imgSrc: string | null; rawSvg: string | null };
 
 function toImgSrc(v: { svg?: string; b64?: string | null }): string | null {
   if (v.svg) return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(v.svg)}`;
@@ -160,9 +158,12 @@ function ContourPreviewV2({
   onSelect?: () => void;
   onSelectSvg?: (svg: string) => void;
 }) {
+  const { silhouetteVariants, silhouetteVariantsShape, setSilhouetteVariants } = useWizardStore();
   const [selected, setSelected] = useState(0);
-  const [variants, setVariants] = useState<ShapeVariant[]>(EMPTY_VARIANTS);
-  const [fetching, setFetching] = useState(!!shapeName);
+
+  const cached = silhouetteVariantsShape === shapeName && silhouetteVariants;
+  const variants: ShapeVariant[] = cached || EMPTY_VARIANTS;
+  const [fetching, setFetching] = useState(!cached && !!shapeName);
 
   const displayName = shapeName
     ? shapeName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -170,9 +171,16 @@ function ContourPreviewV2({
 
   useEffect(() => {
     if (!shapeName) { setFetching(false); return; }
+    // Skip fetch if we already have variants for this shape
+    if (silhouetteVariantsShape === shapeName && silhouetteVariants) {
+      const first = silhouetteVariants[0];
+      if (first?.rawSvg) onSelectSvg?.(first.rawSvg);
+      else if (first?.imgSrc) onSelectSvg?.(first.imgSrc);
+      setFetching(false);
+      return;
+    }
     setFetching(true);
     setSelected(0);
-    setVariants(EMPTY_VARIANTS);
     runSilhouettes(shapeName)
       .then(({ variants: fetched }) => {
         const updated: ShapeVariant[] = fetched.map((v) => ({
@@ -181,7 +189,7 @@ function ContourPreviewV2({
           imgSrc: toImgSrc(v),
           rawSvg: v.svg ?? null,
         }));
-        setVariants(updated);
+        setSilhouetteVariants(shapeName, updated);
         // Pass raw SVG or imgSrc for engineer handoff
         const first = updated[0];
         if (first?.rawSvg) onSelectSvg?.(first.rawSvg);
