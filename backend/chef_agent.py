@@ -9,13 +9,15 @@ from __future__ import annotations
 
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from openai import OpenAI
+import base64
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from nutrition_analyzer import fetch_ingredient_profiles
 
 
 load_dotenv()
-client = OpenAI()
+client = genai.Client()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -200,7 +202,7 @@ def propose(
     dietitian_output: Dict[str, Any],
     use_kb: bool = False,
     kb_paths: Optional[List[str]] = None,
-    model: str = "gpt-4o-mini",
+    model: str = "gemini-3.1-flash-lite-preview",
     sections_enabled: Optional[Dict[str, bool]] = None,
     sections_content: Optional[Dict[str, str]] = None,
     use_usda_api: bool = True,
@@ -267,15 +269,16 @@ def _plan_ingredients(
     """Step 1 — LLM decides main ingredients per syringe."""
     user_message = _build_chef_user_message(requirement, dietitian_output)
     plan_prompt = build_prompt("plan", sections_enabled, sections_content) + _PLAN_INGREDIENTS_EXTRA
-    response = client.responses.parse(
+    response = client.models.generate_content(
         model=model,
-        input=[
-            {"role": "system", "content": plan_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        text_format=IngredientPlan,
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=plan_prompt,
+            response_mime_type="application/json",
+            response_schema=IngredientPlan,
+        ),
     )
-    return response.output_parsed
+    return response.parsed
 
 
 def _retrieve_kb_context(
@@ -412,15 +415,16 @@ def _generate_instructions(
 
     system = "\n".join(sys_lines)
 
-    response = client.responses.parse(
+    response = client.models.generate_content(
         model=model,
-        input=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_message},
-        ],
-        text_format=RecipeInstructions,
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json",
+            response_schema=RecipeInstructions,
+        ),
     )
-    return response.output_parsed
+    return response.parsed
 
 
 def _assemble_chef_output(
@@ -500,13 +504,14 @@ def _generate_silhouette_image(requirement: Dict[str, Any]) -> Optional[str]:
             f"Minimal, abstract silhouette — no details, no texture, no internal lines. "
             f"Like a flat rubber stamp. Centered, 2D."
         )
-        response = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="1024x1024",
-            quality="low",
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=[prompt],
         )
-        return response.data[0].b64_json
+        for part in response.parts:
+            if part.inline_data is not None:
+                return base64.b64encode(part.inline_data.data).decode()
+        return None
     except Exception as e:
         print(f"[Chef] Silhouette image generation failed: {e}")
         return None

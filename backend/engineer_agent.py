@@ -16,7 +16,7 @@ import numpy as np
 from pathlib import Path
 
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from google import genai
 from dotenv import load_dotenv
 
 from datetime import datetime
@@ -33,7 +33,7 @@ from gcode_generation import (
 
 
 load_dotenv()
-client = OpenAI()
+client = genai.Client()
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "gcode_templates"
 
@@ -87,11 +87,14 @@ def _generate_silhouette(shape_description: str) -> Optional[bytes]:
         f"Pure white background. Simple clean silhouette, outline only."
     )
     try:
-        resp = client.images.generate(
-            model="gpt-image-1", prompt=prompt,
-            size="1024x1024", quality="low", output_format="png", n=1,
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=[prompt],
         )
-        return base64.b64decode(resp.data[0].b64_json)
+        for part in response.parts:
+            if part.inline_data is not None:
+                return part.inline_data.data
+        return None
     except Exception as e:
         print(f"[Engineer] Image gen failed: {e}")
         return None
