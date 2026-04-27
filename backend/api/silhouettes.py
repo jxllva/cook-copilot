@@ -24,7 +24,6 @@ _executor = ThreadPoolExecutor(max_workers=3)
 
 class SilhouetteRequest(BaseModel):
     shape: str
-    variant_index: Optional[int] = None  # if set, generate only that variant (0–2)
 
 class SilhouetteVariant(BaseModel):
     label: str
@@ -97,19 +96,6 @@ def _generate_one(shape: str, suffix: str) -> Optional[str]:
 @router.post("/api/silhouettes", response_model=SilhouettesResponse)
 async def generate_silhouettes(req: SilhouetteRequest) -> SilhouettesResponse:
     loop = asyncio.get_running_loop()
-
-    # Single-variant mode: generate only the requested index and return immediately
-    if req.variant_index is not None:
-        idx = req.variant_index
-        if idx < 0 or idx >= len(_VARIANTS):
-            return SilhouettesResponse(variants=[])
-        v = _VARIANTS[idx]
-        b64 = await loop.run_in_executor(_executor, _generate_one, req.shape, v["suffix"])
-        return SilhouettesResponse(
-            variants=[SilhouetteVariant(label=v["label"], description=v["description"], b64=b64)]
-        )
-
-    # Batch mode: generate all 3 concurrently
     tasks = [
         loop.run_in_executor(_executor, _generate_one, req.shape, v["suffix"])
         for v in _VARIANTS

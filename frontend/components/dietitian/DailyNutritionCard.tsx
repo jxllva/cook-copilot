@@ -36,7 +36,7 @@ export function DailyNutritionCard({
         padding: "20px",
       }}
     >
-      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--fg)", marginBottom: "14px" }}>
+      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--fg2)", marginBottom: "14px" }}>
         Daily Nutrition Target
       </div>
 
@@ -61,8 +61,7 @@ export function DailyNutritionCard({
                 border: "1px solid var(--card-border)",
                 background: "var(--bg2)",
                 fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--fg)",
+                color: "var(--fg2)",
                 whiteSpace: "nowrap",
                 width: `${calloutWidth}px`,
                 textAlign: "center",
